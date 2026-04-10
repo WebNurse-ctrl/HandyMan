@@ -3,11 +3,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Toaster } from 'react-hot-toast';
-import { MsalProvider } from '@azure/msal-react';
-import { PublicClientApplication } from '@azure/msal-browser';
-import { msalConfig } from '@/lib/msal-config';
-
-const msalInstance = new PublicClientApplication(msalConfig);
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -23,21 +18,19 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <MsalProvider instance={msalInstance}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              borderRadius: '0.75rem',
-              padding: '12px 16px',
-              fontSize: '14px',
-            },
-          }}
-        />
-      </QueryClientProvider>
-    </MsalProvider>
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            borderRadius: '0.75rem',
+            padding: '12px 16px',
+            fontSize: '14px',
+          },
+        }}
+      />
+    </QueryClientProvider>
   );
 }

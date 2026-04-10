@@ -1,27 +1,11 @@
 {
   "name": "handyman",
   "version": "1.0.0",
-  "description": "HandyMan - Facility Management Platform for multi-campus organizations",
+  "description": "HandyMan - Facility Management Platform",
   "private": true,
-  "workspaces": [
-    "backend",
-    "frontend"
-  ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "npm run start:dev --workspace=backend",
-    "dev:frontend": "npm run dev --workspace=frontend",
-    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
-    "build:backend": "npm run build --workspace=backend",
-    "build:frontend": "npm run build --workspace=frontend",
-    "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
-    "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
-    "db:migrate": "npm run prisma:migrate --workspace=backend",
-    "db:seed": "npm run prisma:seed --workspace=backend",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npx prisma generate && npm run build",
+    "postinstall": "cd frontend && npx prisma generate"
   }
 }

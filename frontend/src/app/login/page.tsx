@@ -2,30 +2,27 @@
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMsal } from '@azure/msal-react';
-import { loginRequest } from '@/lib/msal-config';
+import { Suspense } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { instance } = useMsal();
   const { setAuth, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    // Handle token from callback
     const token = searchParams.get('token');
     if (token) {
       localStorage.setItem('handyman_token', token);
-      // Fetch user data and redirect
-      fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/auth/me`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      )
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
         .then((res) => res.json())
         .then((user) => {
-          setAuth(token, user);
-          router.push('/dashboard');
+          if (user && user.id) {
+            setAuth(token, user);
+            router.push('/dashboard');
+          }
         })
         .catch(() => {
           localStorage.removeItem('handyman_token');
@@ -40,15 +37,13 @@ export default function LoginPage() {
   }, [isAuthenticated, router]);
 
   const handleLogin = () => {
-    // Redirect to backend auth endpoint
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/auth/login`;
+    window.location.href = '/api/auth/callback?code=demo';
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="w-full max-w-md px-4">
         <div className="card text-center">
-          {/* Logo */}
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-600 shadow-lg">
             <svg
               className="h-8 w-8 text-white"
@@ -95,5 +90,17 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }

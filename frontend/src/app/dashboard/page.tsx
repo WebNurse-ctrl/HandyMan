@@ -4,38 +4,66 @@ import { useQuery } from '@tanstack/react-query';
 import AppLayout from '@/components/layout/AppLayout';
 import StatCard from '@/components/ui/StatCard';
 import { apiGet } from '@/lib/api';
-import { DashboardOverview } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
+
+interface DashboardOverview {
+  workRequests: { total: number; open: number; inProgress: number; completed: number };
+  tasks: { total: number; open: number; inProgress: number; completed: number };
+  projects: { active: number };
+  purchases: { pendingApproval: number };
+}
+
+interface TrendItem {
+  month: string;
+  created: number;
+  resolved: number;
+}
+
+interface WorkloadItem {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  activeTasks: number;
+}
+
+interface BudgetItem {
+  id: string;
+  name: string;
+  projectNumber: string;
+  budgetEstimate: number;
+  budgetApproved: number;
+  budgetSpent: number;
+  percentUsed: number;
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
 
-  const { data: overview, isLoading } = useQuery<DashboardOverview>({
+  const { data: overview } = useQuery<DashboardOverview>({
     queryKey: ['dashboard', 'overview'],
-    queryFn: () => apiGet('/api/dashboard/overview'),
+    queryFn: () => apiGet('/api/dashboard/overview') as Promise<DashboardOverview>,
   });
 
-  const { data: workload } = useQuery({
+  const { data: workload } = useQuery<WorkloadItem[]>({
     queryKey: ['dashboard', 'workload'],
-    queryFn: () => apiGet('/api/dashboard/workload'),
+    queryFn: () => apiGet('/api/dashboard/workload') as Promise<WorkloadItem[]>,
     enabled: user?.role !== 'MEDEWERKER',
   });
 
-  const { data: trends } = useQuery({
+  const { data: trends } = useQuery<TrendItem[]>({
     queryKey: ['dashboard', 'trends'],
-    queryFn: () => apiGet('/api/dashboard/trends'),
+    queryFn: () => apiGet('/api/dashboard/trends') as Promise<TrendItem[]>,
   });
 
-  const { data: budgetSummary } = useQuery({
+  const { data: budgetSummary } = useQuery<BudgetItem[]>({
     queryKey: ['dashboard', 'budget-summary'],
-    queryFn: () => apiGet('/api/dashboard/budget-summary'),
+    queryFn: () => apiGet('/api/dashboard/budget-summary') as Promise<BudgetItem[]>,
     enabled: user?.role !== 'MEDEWERKER',
   });
 
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Page header */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -43,11 +71,10 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Stats grid */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Openstaande aanvragen"
-            value={overview?.workRequests.open ?? '-'}
+            value={overview?.workRequests.open ?? 0}
             subtitle={`${overview?.workRequests.total ?? 0} totaal`}
             color="primary"
             icon={
@@ -58,10 +85,7 @@ export default function DashboardPage() {
           />
           <StatCard
             title="Actieve taken"
-            value={
-              (overview?.tasks.open ?? 0) +
-              (overview?.tasks.inProgress ?? 0)
-            }
+            value={(overview?.tasks.open ?? 0) + (overview?.tasks.inProgress ?? 0)}
             subtitle={`${overview?.tasks.completed ?? 0} afgewerkt`}
             color="warning"
             icon={
@@ -72,7 +96,7 @@ export default function DashboardPage() {
           />
           <StatCard
             title="Actieve projecten"
-            value={overview?.projects.active ?? '-'}
+            value={overview?.projects.active ?? 0}
             color="success"
             icon={
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -82,7 +106,7 @@ export default function DashboardPage() {
           />
           <StatCard
             title="Wacht op goedkeuring"
-            value={overview?.purchases.pendingApproval ?? '-'}
+            value={overview?.purchases.pendingApproval ?? 0}
             color="danger"
             icon={
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -93,44 +117,36 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Recent activity */}
           <div className="card lg:col-span-2">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Maandelijkse trends
-            </h2>
-            <p className="text-sm text-gray-500">
-              Aanvragen aangemaakt vs afgewerkt
-            </p>
+            <h2 className="text-lg font-semibold text-gray-900">Maandelijkse trends</h2>
+            <p className="text-sm text-gray-500">Aanvragen aangemaakt vs afgewerkt</p>
             <div className="mt-4">
-              {trends && Array.isArray(trends) ? (
+              {trends && trends.length > 0 ? (
                 <div className="space-y-3">
-                  {(trends as any[]).map((t: any) => (
-                    <div key={t.month} className="flex items-center gap-4">
-                      <span className="w-20 text-xs text-gray-500">
-                        {t.month}
-                      </span>
-                      <div className="flex-1">
-                        <div className="flex gap-1">
-                          <div
-                            className="h-6 rounded-l bg-primary-200"
-                            style={{
-                              width: `${Math.max((t.created / (Math.max(...(trends as any[]).map((x: any) => x.created)) || 1)) * 100, 4)}%`,
-                            }}
-                          />
-                          <div
-                            className="h-6 rounded-r bg-success-200"
-                            style={{
-                              width: `${Math.max((t.resolved / (Math.max(...(trends as any[]).map((x: any) => x.created)) || 1)) * 100, 4)}%`,
-                            }}
-                          />
+                  {trends.map((t) => {
+                    const maxCreated = Math.max(...trends.map((x) => x.created), 1);
+                    return (
+                      <div key={t.month} className="flex items-center gap-4">
+                        <span className="w-20 text-xs text-gray-500">{t.month}</span>
+                        <div className="flex-1">
+                          <div className="flex gap-1">
+                            <div
+                              className="h-6 rounded-l bg-primary-200"
+                              style={{ width: `${Math.max((t.created / maxCreated) * 100, 4)}%` }}
+                            />
+                            <div
+                              className="h-6 rounded-r bg-success-200"
+                              style={{ width: `${Math.max((t.resolved / maxCreated) * 100, 4)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-3 text-xs">
+                          <span className="text-primary-600">{t.created} nieuw</span>
+                          <span className="text-success-600">{t.resolved} klaar</span>
                         </div>
                       </div>
-                      <div className="flex gap-3 text-xs">
-                        <span className="text-primary-600">{t.created} nieuw</span>
-                        <span className="text-success-600">{t.resolved} klaar</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="flex h-48 items-center justify-center text-sm text-gray-400">
@@ -140,82 +156,48 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Workload */}
-          {workload && Array.isArray(workload) && (
+          {workload && workload.length > 0 && (
             <div className="card">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Werklast team
-              </h2>
+              <h2 className="text-lg font-semibold text-gray-900">Werklast team</h2>
               <p className="text-sm text-gray-500">Actieve taken per medewerker</p>
               <div className="mt-4 space-y-3">
-                {(workload as any[]).map((w: any) => (
-                  <div
-                    key={w.id}
-                    className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5"
-                  >
+                {workload.map((w) => (
+                  <div key={w.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700">
-                        {w.displayName
-                          .split(' ')
-                          .map((n: string) => n[0])
-                          .join('')
-                          .slice(0, 2)}
+                        {w.displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                       </div>
-                      <span className="text-sm font-medium text-gray-700">
-                        {w.displayName}
-                      </span>
+                      <span className="text-sm font-medium text-gray-700">{w.displayName}</span>
                     </div>
                     <span className="rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-semibold text-primary-700">
                       {w.activeTasks} taken
                     </span>
                   </div>
                 ))}
-                {(workload as any[]).length === 0 && (
-                  <p className="py-4 text-center text-sm text-gray-400">
-                    Geen teamleden gevonden
-                  </p>
-                )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Budget overview for managers */}
-        {budgetSummary && Array.isArray(budgetSummary) && (budgetSummary as any[]).length > 0 && (
+        {budgetSummary && budgetSummary.length > 0 && (
           <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Projectbudgetten
-            </h2>
+            <h2 className="text-lg font-semibold text-gray-900">Projectbudgetten</h2>
             <div className="mt-4 overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead>
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase text-gray-500">
-                      Project
-                    </th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase text-gray-500">
-                      Budget
-                    </th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase text-gray-500">
-                      Besteed
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase text-gray-500">
-                      Voortgang
-                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase text-gray-500">Project</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase text-gray-500">Budget</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase text-gray-500">Besteed</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase text-gray-500">Voortgang</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {(budgetSummary as any[]).map((p: any) => (
+                  {budgetSummary.map((p) => (
                     <tr key={p.id}>
                       <td className="px-4 py-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {p.name}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {p.projectNumber}
-                          </p>
-                        </div>
+                        <p className="text-sm font-medium text-gray-900">{p.name}</p>
+                        <p className="text-xs text-gray-500">{p.projectNumber}</p>
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-gray-700">
                         EUR {p.budgetApproved.toLocaleString('nl-BE')}
@@ -228,20 +210,12 @@ export default function DashboardPage() {
                           <div className="h-2 w-24 rounded-full bg-gray-200">
                             <div
                               className={`h-2 rounded-full ${
-                                p.percentUsed > 90
-                                  ? 'bg-danger-500'
-                                  : p.percentUsed > 70
-                                    ? 'bg-warning-500'
-                                    : 'bg-success-500'
+                                p.percentUsed > 90 ? 'bg-danger-500' : p.percentUsed > 70 ? 'bg-warning-500' : 'bg-success-500'
                               }`}
-                              style={{
-                                width: `${Math.min(p.percentUsed, 100)}%`,
-                              }}
+                              style={{ width: `${Math.min(p.percentUsed, 100)}%` }}
                             />
                           </div>
-                          <span className="text-xs text-gray-500">
-                            {p.percentUsed}%
-                          </span>
+                          <span className="text-xs text-gray-500">{p.percentUsed}%</span>
                         </div>
                       </td>
                     </tr>

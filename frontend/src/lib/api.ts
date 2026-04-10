@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+  baseURL: '',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -35,13 +35,13 @@ api.interceptors.response.use(
 export default api;
 
 // API helper functions
-export const apiGet = <T>(url: string, params?: any) =>
+export const apiGet = <T>(url: string, params?: Record<string, unknown>) =>
   api.get<T>(url, { params }).then((res) => res.data);
 
-export const apiPost = <T>(url: string, data?: any) =>
+export const apiPost = <T>(url: string, data?: unknown) =>
   api.post<T>(url, data).then((res) => res.data);
 
-export const apiPatch = <T>(url: string, data?: any) =>
+export const apiPatch = <T>(url: string, data?: unknown) =>
   api.patch<T>(url, data).then((res) => res.data);
 
 export const apiDelete = <T>(url: string) =>
