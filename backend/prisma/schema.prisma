@@ -1,0 +1,495 @@
+// HandyMan - Facility Management Platform
+// Database Schema - PostgreSQL with Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USERS & AUTHENTICATION
+// ============================================================================
+
+enum UserRole {
+  MEDEWERKER           // Default employee
+  TECHNISCHE_DIENST    // Technical service worker
+  DIENSTHOOFD          // Department head
+  FACILITAIR_MANAGER   // Facility manager
+  ADMIN                // System administrator
+}
+
+model User {
+  id              String    @id @default(uuid())
+  azureAdId       String    @unique @map("azure_ad_id")
+  email           String    @unique
+  displayName     String    @map("display_name")
+  firstName       String?   @map("first_name")
+  lastName        String?   @map("last_name")
+  department      String?
+  jobTitle        String?   @map("job_title")
+  phone           String?
+  avatarUrl       String?   @map("avatar_url")
+  role            UserRole  @default(MEDEWERKER)
+  isActive        Boolean   @default(true) @map("is_active")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  workRequests         WorkRequest[]      @relation("RequestedBy")
+  assignedTasks        Task[]             @relation("AssignedTo")
+  createdTasks         Task[]             @relation("TaskCreatedBy")
+  taskLogs             TaskLog[]
+  createdProjects      Project[]          @relation("ProjectCreatedBy")
+  managedProjects      Project[]          @relation("ProjectManager")
+  purchaseRequests     PurchaseRequest[]  @relation("PurchaseRequestedBy")
+  purchaseApprovals    PurchaseApproval[]
+  notifications        Notification[]
+  comments             Comment[]
+  auditLogs            AuditLog[]
+
+  @@map("users")
+}
+
+// ============================================================================
+// CAMPUSES & LOCATIONS
+// ============================================================================
+
+model Campus {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  address     String?
+  city        String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  locations   Location[]
+  workRequests WorkRequest[]
+  projects    Project[]
+
+  @@map("campuses")
+}
+
+model Location {
+  id          String   @id @default(uuid())
+  campusId    String   @map("campus_id")
+  name        String
+  building    String?
+  floor       String?
+  room        String?
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  campus       Campus        @relation(fields: [campusId], references: [id])
+  workRequests WorkRequest[]
+
+  @@unique([campusId, name])
+  @@map("locations")
+}
+
+// ============================================================================
+// CATEGORIES
+// ============================================================================
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  icon        String?
+  color       String?
+  parentId    String?  @map("parent_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Self-relation for subcategories
+  parent       Category?     @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children     Category[]    @relation("CategoryHierarchy")
+
+  // Relations
+  workRequests WorkRequest[]
+  tasks        Task[]
+
+  @@map("categories")
+}
+
+// ============================================================================
+// WORK REQUESTS (Werkaanvragen)
+// ============================================================================
+
+enum WorkRequestStatus {
+  INGEDIEND       // Submitted
+  IN_BEHANDELING  // In progress / being triaged
+  GOEDGEKEURD     // Approved
+  AFGEWERKT       // Completed
+  GEWEIGERD       // Rejected
+}
+
+enum Priority {
+  LAAG      // Low
+  NORMAAL   // Normal
+  HOOG      // High
+  URGENT    // Urgent
+}
+
+model WorkRequest {
+  id              String            @id @default(uuid())
+  requestNumber   String            @unique @map("request_number")
+  title           String
+  description     String
+  requestedById   String            @map("requested_by_id")
+  campusId        String            @map("campus_id")
+  locationId      String?           @map("location_id")
+  categoryId      String?           @map("category_id")
+  priority        Priority          @default(NORMAAL)
+  suggestedPriority Priority?       @map("suggested_priority")
+  status          WorkRequestStatus @default(INGEDIEND)
+  rejectionReason String?           @map("rejection_reason")
+  resolvedAt      DateTime?         @map("resolved_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  requestedBy  User          @relation("RequestedBy", fields: [requestedById], references: [id])
+  campus       Campus        @relation(fields: [campusId], references: [id])
+  location     Location?     @relation(fields: [locationId], references: [id])
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  attachments  Attachment[]
+  comments     Comment[]
+  tasks        Task[]        @relation("TaskFromRequest")
+  project      Project?      @relation("ProjectFromRequest")
+  purchases    PurchaseRequest[] @relation("PurchaseFromRequest")
+
+  // Bundle support
+  bundleId     String?       @map("bundle_id")
+  bundle       RequestBundle? @relation(fields: [bundleId], references: [id])
+
+  @@index([status])
+  @@index([campusId])
+  @@index([requestedById])
+  @@index([createdAt])
+  @@map("work_requests")
+}
+
+model RequestBundle {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  requests    WorkRequest[]
+
+  @@map("request_bundles")
+}
+
+// ============================================================================
+// TASKS (Takenbeheer)
+// ============================================================================
+
+enum TaskStatus {
+  OPEN
+  IN_UITVOERING  // In progress
+  AFGEWERKT      // Completed
+  ON_HOLD
+}
+
+model Task {
+  id              String     @id @default(uuid())
+  taskNumber      String     @unique @map("task_number")
+  title           String
+  description     String?
+  assignedToId    String?    @map("assigned_to_id")
+  createdById     String     @map("created_by_id")
+  workRequestId   String?    @map("work_request_id")
+  projectId       String?    @map("project_id")
+  categoryId      String?    @map("category_id")
+  priority        Priority   @default(NORMAAL)
+  status          TaskStatus @default(OPEN)
+  startDate       DateTime?  @map("start_date")
+  dueDate         DateTime?  @map("due_date")
+  completedAt     DateTime?  @map("completed_at")
+  estimatedHours  Float?     @map("estimated_hours")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  assignedTo   User?         @relation("AssignedTo", fields: [assignedToId], references: [id])
+  createdBy    User          @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  workRequest  WorkRequest?  @relation("TaskFromRequest", fields: [workRequestId], references: [id])
+  project      Project?      @relation(fields: [projectId], references: [id])
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  logs         TaskLog[]
+  comments     Comment[]
+  attachments  Attachment[]
+  purchases    PurchaseRequest[] @relation("PurchaseFromTask")
+
+  @@index([status])
+  @@index([assignedToId])
+  @@index([projectId])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+model TaskLog {
+  id          String   @id @default(uuid())
+  taskId      String   @map("task_id")
+  userId      String   @map("user_id")
+  description String
+  hoursWorked Float?   @map("hours_worked")
+  logDate     DateTime @default(now()) @map("log_date")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@map("task_logs")
+}
+
+// ============================================================================
+// PROJECTS (Projectbeheer)
+// ============================================================================
+
+enum ProjectStatus {
+  PLANNING
+  ACTIEF       // Active
+  ON_HOLD
+  AFGEROND     // Completed
+  GEANNULEERD  // Cancelled
+}
+
+model Project {
+  id              String        @id @default(uuid())
+  projectNumber   String        @unique @map("project_number")
+  name            String
+  description     String?
+  campusId        String?       @map("campus_id")
+  managerId       String?       @map("manager_id")
+  createdById     String        @map("created_by_id")
+  workRequestId   String?       @unique @map("work_request_id")
+  status          ProjectStatus @default(PLANNING)
+  budgetEstimate  Decimal?      @map("budget_estimate") @db.Decimal(12, 2)
+  budgetApproved  Decimal?      @map("budget_approved") @db.Decimal(12, 2)
+  budgetSpent     Decimal       @default(0) @map("budget_spent") @db.Decimal(12, 2)
+  startDate       DateTime?     @map("start_date")
+  endDate         DateTime?     @map("end_date")
+  completedAt     DateTime?     @map("completed_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  campus       Campus?          @relation(fields: [campusId], references: [id])
+  manager      User?            @relation("ProjectManager", fields: [managerId], references: [id])
+  createdBy    User             @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  workRequest  WorkRequest?     @relation("ProjectFromRequest", fields: [workRequestId], references: [id])
+  tasks        Task[]
+  purchases    PurchaseRequest[] @relation("PurchaseFromProject")
+  comments     Comment[]
+  attachments  Attachment[]
+
+  @@index([status])
+  @@index([campusId])
+  @@map("projects")
+}
+
+// ============================================================================
+// PURCHASES (Aankoopbeheer)
+// ============================================================================
+
+enum PurchaseStatus {
+  AANGEVRAAGD            // Requested
+  WACHT_OP_GOEDKEURING   // Awaiting approval
+  GOEDGEKEURD_DIENSTHOOFD // Approved by dept head
+  GOEDGEKEURD            // Fully approved
+  AFGEWEZEN              // Rejected
+  BESTELD                // Ordered
+  GELEVERD               // Delivered
+}
+
+enum PurchaseType {
+  KLEIN    // Small purchase (under threshold)
+  GROOT    // Large purchase (requires approval)
+}
+
+model PurchaseRequest {
+  id              String         @id @default(uuid())
+  purchaseNumber  String         @unique @map("purchase_number")
+  title           String
+  description     String?
+  requestedById   String         @map("requested_by_id")
+  workRequestId   String?        @map("work_request_id")
+  taskId          String?        @map("task_id")
+  projectId       String?        @map("project_id")
+  type            PurchaseType   @default(KLEIN)
+  status          PurchaseStatus @default(AANGEVRAAGD)
+  estimatedCost   Decimal        @map("estimated_cost") @db.Decimal(12, 2)
+  actualCost      Decimal?       @map("actual_cost") @db.Decimal(12, 2)
+  supplier        String?
+  orderReference  String?        @map("order_reference")
+  rejectionReason String?        @map("rejection_reason")
+  orderedAt       DateTime?      @map("ordered_at")
+  deliveredAt     DateTime?      @map("delivered_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  requestedBy  User               @relation("PurchaseRequestedBy", fields: [requestedById], references: [id])
+  workRequest  WorkRequest?       @relation("PurchaseFromRequest", fields: [workRequestId], references: [id])
+  task         Task?              @relation("PurchaseFromTask", fields: [taskId], references: [id])
+  project      Project?           @relation("PurchaseFromProject", fields: [projectId], references: [id])
+  approvals    PurchaseApproval[]
+  attachments  Attachment[]
+
+  @@index([status])
+  @@index([requestedById])
+  @@map("purchase_requests")
+}
+
+model PurchaseApproval {
+  id          String   @id @default(uuid())
+  purchaseId  String   @map("purchase_id")
+  approverId  String   @map("approver_id")
+  approved    Boolean
+  comment     String?
+  approvedAt  DateTime @default(now()) @map("approved_at")
+
+  // Relations
+  purchase PurchaseRequest @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  approver User            @relation(fields: [approverId], references: [id])
+
+  @@unique([purchaseId, approverId])
+  @@map("purchase_approvals")
+}
+
+// ============================================================================
+// SHARED: COMMENTS, ATTACHMENTS, NOTIFICATIONS
+// ============================================================================
+
+model Comment {
+  id            String   @id @default(uuid())
+  content       String
+  userId        String   @map("user_id")
+  workRequestId String?  @map("work_request_id")
+  taskId        String?  @map("task_id")
+  projectId     String?  @map("project_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user        User         @relation(fields: [userId], references: [id])
+  workRequest WorkRequest? @relation(fields: [workRequestId], references: [id], onDelete: Cascade)
+  task        Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workRequestId])
+  @@index([taskId])
+  @@index([projectId])
+  @@map("comments")
+}
+
+model Attachment {
+  id            String   @id @default(uuid())
+  fileName      String   @map("file_name")
+  originalName  String   @map("original_name")
+  mimeType      String   @map("mime_type")
+  size          Int
+  url           String
+  workRequestId String?  @map("work_request_id")
+  taskId        String?  @map("task_id")
+  projectId     String?  @map("project_id")
+  purchaseId    String?  @map("purchase_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  workRequest     WorkRequest?     @relation(fields: [workRequestId], references: [id], onDelete: Cascade)
+  task            Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  purchaseRequest PurchaseRequest? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+enum NotificationType {
+  WORK_REQUEST_CREATED
+  WORK_REQUEST_STATUS_CHANGED
+  TASK_ASSIGNED
+  TASK_STATUS_CHANGED
+  TASK_DEADLINE_APPROACHING
+  PURCHASE_APPROVAL_NEEDED
+  PURCHASE_APPROVED
+  PURCHASE_REJECTED
+  PROJECT_BUDGET_ALERT
+  COMMENT_ADDED
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String           @map("user_id")
+  type        NotificationType
+  title       String
+  message     String
+  isRead      Boolean          @default(false) @map("is_read")
+  entityType  String?          @map("entity_type")
+  entityId    String?          @map("entity_id")
+  emailSent   Boolean          @default(false) @map("email_sent")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================================================
+// SYSTEM CONFIGURATION
+// ============================================================================
+
+model SystemConfig {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+  description String?
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_config")
+}
+
+// ============================================================================
+// AUDIT LOG
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
