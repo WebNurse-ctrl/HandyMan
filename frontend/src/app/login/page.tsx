@@ -37,7 +37,7 @@ function LoginContent() {
   }, [isAuthenticated, router]);
 
   const handleLogin = () => {
-    window.location.href = '/api/auth/callback?code=demo';
+    window.location.href = '/api/auth/login';
   };
 
   return (
