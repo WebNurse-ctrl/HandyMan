@@ -2,10 +2,5 @@
   "name": "handyman",
   "version": "1.0.0",
   "description": "HandyMan - Facility Management Platform",
-  "private": true,
-  "scripts": {
-    "dev": "cd frontend && npm run dev",
-    "build": "cd frontend && npx prisma generate && npm run build",
-    "postinstall": "cd frontend && npx prisma generate"
-  }
+  "private": true
 }
