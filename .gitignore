@@ -33,3 +33,4 @@ coverage/
 
 # Prisma
 backend/prisma/*.db
+**/tsconfig.tsbuildinfo
