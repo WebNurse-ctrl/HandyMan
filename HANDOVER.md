@@ -39,7 +39,7 @@ HandyMan/
 ├── backend/                    # LEGACY - niet in gebruik op Vercel
 ├── frontend/                   # DE ACTIEVE APP (Vercel Root Directory)
 │   ├── prisma/
-│   │   └── schema.prisma       # Database schema (16 tabellen)
+│   │   └── schema.prisma       # Database schema (15 tabellen)
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── api/            # Serverless API routes (backend)
@@ -164,8 +164,8 @@ geen goedkeuringsflow. De admin kan achteraf de rol aanpassen via `/admin`.
 | Gebruikers/rollen beheren | | | | x | x |
 
 **RBAC status**:
-- De admin-endpoints (`/api/users*`) gebruiken sinds v1.2 `requireAdmin()` uit
-  `lib/auth-server.ts` voor een echte role-check.
+- De admin-endpoints (`/api/users`, `/api/users/[id]/role`) gebruiken
+  `requireAdmin()` uit `lib/auth-server.ts` voor een echte role-check.
 - De overige endpoints (work-requests, tasks, projects, purchases,
   dashboard, notifications) vertrouwen nog steeds enkel op een geldig token
   en hebben nog geen strikte role-enforcement. Dit is nog openstaand werk.
@@ -232,46 +232,60 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 
 ## Wijzigingen in v1.2.1 (branch `claude/fix-admin-panel-HyGll`)
 
-### Huidige staat
-- **Admin panel werkt**: Johan Beckers wordt bij login automatisch
-  gepromoveerd naar `role=ADMIN` (match op `displayName === "Johan Beckers"`
-  of email-prefix `johan.beckers@` via `lib/auth-server.ts::isAdminIdentity`).
-  Op `/admin` kan hij de rol van andere gebruikers aanpassen via een dropdown.
-- **Sidebar "Beheer"** en `/admin` zijn enkel toegankelijk voor `ADMIN`.
+### Huidige staat — admin paneel werkt
+- **Johan Beckers = ADMIN**: bij login wordt hij automatisch gepromoveerd
+  naar `role=ADMIN` via `lib/auth-server.ts::isAdminIdentity` (match op
+  `displayName === "Johan Beckers"` of email die start met
+  `johan.beckers@`). Zowel bij eerste aanmelding als op elke volgende
+  login (idempotent).
+- **`/admin` panel**: admin-only pagina met gebruikerslijst en rol-dropdown.
+  Rolwijziging gaat via `PATCH /api/users/[id]/role`. Niet-admins worden
+  redirect naar `/dashboard`.
+- **Sidebar "Beheer"** enkel zichtbaar voor `ADMIN`.
 - **Self-demote bescherming**: een admin kan zichzelf niet tot lagere rol
-  zetten als er geen andere ADMIN user meer bestaat.
-- **Iedere medewerker kan direct aanmelden**: er is GEEN goedkeuringsflow —
-  nieuwe users landen direct op `/dashboard` en kunnen werkaanvragen
+  zetten als er geen andere ADMIN user meer bestaat (voorkomt lock-out).
+- **Iedere medewerker kan direct aanmelden**: er is GEEN goedkeuringsflow.
+  Nieuwe users landen direct op `/dashboard` en kunnen werkaanvragen
   indienen met rol `MEDEWERKER` (of hogere rol als hun Azure AD jobTitle
   daarop wijst).
 
-### v1.2 approval-flow (teruggedraaid)
-Een eerdere versie voegde een `UserStatus` + `/pending`-landingspagina toe
-die elke nieuwe aanmelding blokkeerde tot admin-goedkeuring. Dit is
-teruggedraaid omdat iedere medewerker werkaanvragen moet kunnen indienen
-zonder wachttijd. De rollback verwijderde:
+### Nieuwe / gewijzigde bestanden (t.o.v. v1.0)
+- **Nieuw**:
+  - `src/lib/auth-server.ts` — helpers `getUserFromRequest()`,
+    `requireAdmin()`, `isAdminIdentity()`.
+  - `src/app/api/users/[id]/role/route.ts` — PATCH endpoint voor
+    rolbeheer (admin-only, last-admin self-demote check).
+- **Gewijzigd**:
+  - `src/app/api/auth/callback/route.ts` — Johan Beckers auto-promote
+    naar ADMIN.
+  - `src/app/api/users/route.ts` — admin-only gemaakt.
+  - `src/app/admin/page.tsx` — rol-update via API + admin guard.
+  - `src/components/layout/Sidebar.tsx` — "Beheer" alleen voor ADMIN.
+  - `src/types/index.ts` — kleine types opkuis.
+- **Ongewijzigd** (t.o.v. v1.0): `prisma/schema.prisma` is identiek aan de
+  v1.0 versie. De v1.2 schema-uitbreiding (UserStatus/approval-velden) is
+  teruggedraaid.
+
+### Historisch: v1.2 approval-flow (teruggedraaid)
+Een tussenversie (commit `eb22c4e`) voegde een `UserStatus` enum +
+`/pending` landingspagina + e-mail goedkeuring via Microsoft Graph toe,
+waardoor elke nieuwe aanmelding eerst door een admin moest worden
+goedgekeurd. Dit is teruggedraaid in commit `8e047b7` omdat iedere
+medewerker direct moet kunnen aanmelden om werkaanvragen in te dienen.
+De rollback verwijderde:
 - `UserStatus` enum, `users.status/approvedAt/approvedById` kolommen
 - `USER_APPROVAL_NEEDED` en `USER_APPROVED` notification types
-- `/pending` pagina
+- `/pending` pagina + AppLayout status-redirect
 - `/api/users/pending` en `/api/users/[id]/approve` endpoints
-- `lib/email.ts` en `AZURE_AD_MAIL_SENDER` env var
-
-### Nieuwe / gewijzigde bestanden (t.o.v. v1.0)
-- **Nieuw**: `src/lib/auth-server.ts` (requireAdmin, isAdminIdentity),
-  `src/app/api/users/[id]/role/route.ts` (PATCH endpoint).
-- **Gewijzigd**: `prisma/schema.prisma` (geen; terug naar oorspronkelijk),
-  `src/app/api/auth/callback/route.ts` (Johan → ADMIN),
-  `src/app/api/users/route.ts` (admin-only),
-  `src/app/admin/page.tsx` (role-update via API),
-  `src/components/layout/Sidebar.tsx` ("Beheer" alleen voor ADMIN),
-  `src/types/index.ts`.
+- `src/lib/email.ts` en `AZURE_AD_MAIL_SENDER` env var
 
 ### Database migratie
-Het Prisma schema is identiek aan v1.0 — geen migratie nodig als je al op
-v1.0 zat. Kwam je via de v1.2 approval-flow en heb je die in Supabase
-toegepast? Draai dan onderstaand rollback-script, of gebruik het volledige
-rebuild-script in [`docs/db-rebuild.sql`](docs/db-rebuild.sql) als de DB
-leeg mag:
+Het Prisma schema is identiek aan v1.0 — **geen migratie nodig** als je al
+op v1.0 zat.
+
+Zat je wel al op de v1.2 approval-flow in Supabase? Draai dan onderstaand
+rollback-script (behoudt alle data), of gebruik het volledige rebuild-script
+in [`docs/db-rebuild.sql`](docs/db-rebuild.sql) als de DB leeg mag:
 
 ```sql
 -- Rollback van de v1.2 approval-flow (behoudt alle data)
@@ -285,18 +299,26 @@ DROP TYPE IF EXISTS "UserStatus";
 -- herbouwen. Ze ongebruikt laten is veilig.
 ```
 
+### Git geschiedenis v1.2.x (branch `claude/fix-admin-panel-HyGll`)
+- `eb22c4e` — feat: user approval flow (eerste poging, teruggedraaid)
+- `c23f765` — docs: HANDOVER + db-rebuild.sql
+- `8e047b7` — revert: rollback approval-flow, iedere medewerker kan
+  direct aanmelden
+
 ## Bekende Beperkingen
 
 Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.3+:
 
-1. **RBAC op niet-admin API routes**: alleen `/api/users*` heeft strikte
-   role-checking. De overige endpoints accepteren elk geldig token.
+1. **RBAC op niet-admin API routes**: alleen `/api/users` en
+   `/api/users/[id]/role` hebben strikte role-checking via
+   `requireAdmin()`. De overige endpoints accepteren elk geldig token.
 2. **Foto upload**: het formulier toont een upload area maar de daadwerkelijke file upload is nog niet geïmplementeerd
 3. **Detail pagina's**: er zijn geen `/work-requests/[id]`, `/tasks/[id]`, `/projects/[id]` detail pagina's
 4. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI
 5. **Commentaar systeem**: de comments tabel bestaat maar er is geen UI om comments toe te voegen
-6. **E-mail notificaties voor andere events**: enkel de goedkeuringsmail is
-   geïmplementeerd. Work-request/task/purchase events blijven in-app only.
+6. **E-mail notificaties**: er is helemaal geen e-mail integratie — alle
+   notificaties zijn in-app only. De Microsoft Graph `sendMail` helper uit
+   de v1.2 prototype is teruggedraaid.
 7. **Taak werkregistratie**: er is geen UI voor het logboek/werkregistratie bij taken
 8. **Zoekfunctie**: de globale zoekbalk in de navbar is niet functioneel
 9. **Mobile sidebar**: de hamburger menu toggle werkt niet op mobile
@@ -305,8 +327,8 @@ Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.3+:
 12. **Goedkeuringsflow UI voor aankopen**: aankoop goedkeuren/afwijzen knoppen ontbreken in de UI
 13. **Budget alerts**: de budget overschrijding notificaties zijn niet geïmplementeerd
 14. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt niet op Vercel serverless
-15. **User rejection / deactivation**: de `REJECTED`-status bestaat in het
-    schema maar er is nog geen UI om users af te wijzen of te deactiveren.
+15. **User deactivation UI**: `users.isActive` bestaat in het schema maar er
+    is nog geen UI om users uit te schakelen.
 
 ## Vercel Deployment Configuratie
 
