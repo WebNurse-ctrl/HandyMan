@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { httpErrorResponse, requireAuth, requireRole } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const authed = await requireAuth(request);
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -23,6 +26,11 @@ export async function GET(request: NextRequest) {
         { title: { contains: search, mode: 'insensitive' } },
         { taskNumber: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    // MEDEWERKER sees only tasks assigned to them.
+    if (authed.role === 'MEDEWERKER') {
+      where.assignedToId = authed.id;
     }
 
     const [data, total] = await Promise.all([
@@ -47,6 +55,8 @@ export async function GET(request: NextRequest) {
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
+    const resp = httpErrorResponse(error);
+    if (resp) return resp;
     console.error('Tasks GET error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
@@ -54,7 +64,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const authed = await requireRole(
+      request,
+      'TECHNISCHE_DIENST',
+      'DIENSTHOOFD',
+      'FACILITAIR_MANAGER',
+      'ADMIN',
+    );
     const body = await request.json();
+
+    if (!body.title) {
+      return NextResponse.json({ message: 'title is required' }, { status: 400 });
+    }
 
     const year = new Date().getFullYear();
     const count = await prisma.task.count({
@@ -67,17 +88,12 @@ export async function POST(request: NextRequest) {
     });
     const taskNumber = `T-${year}-${String(count + 1).padStart(4, '0')}`;
 
-    let user = await prisma.user.findFirst();
-    if (!user) {
-      return NextResponse.json({ message: 'No users found' }, { status: 400 });
-    }
-
     const task = await prisma.task.create({
       data: {
         taskNumber,
         title: body.title,
         description: body.description,
-        createdById: user.id,
+        createdById: authed.id,
         assignedToId: body.assignedToId || undefined,
         projectId: body.projectId || undefined,
         workRequestId: body.workRequestId || undefined,
@@ -95,6 +111,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(task, { status: 201 });
   } catch (error) {
+    const resp = httpErrorResponse(error);
+    if (resp) return resp;
     console.error('Tasks POST error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }

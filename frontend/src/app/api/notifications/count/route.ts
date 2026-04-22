@@ -1,22 +1,22 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { httpErrorResponse, requireAuth } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const user = await prisma.user.findFirst();
-    if (!user) {
-      return NextResponse.json(0);
-    }
+    const authed = await requireAuth(request);
 
     const count = await prisma.notification.count({
-      where: { userId: user.id, isRead: false },
+      where: { userId: authed.id, isRead: false },
     });
 
     return NextResponse.json(count);
   } catch (error) {
+    const resp = httpErrorResponse(error);
+    if (resp) return resp;
     console.error('Notification count error:', error);
-    return NextResponse.json(0);
+    return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

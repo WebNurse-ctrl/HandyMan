@@ -7,6 +7,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import DataTable from '@/components/ui/DataTable';
 import { apiGet, apiPatch } from '@/lib/api';
 import { User, PaginatedResponse } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
 
 const roleLabels: Record<string, string> = {
   MEDEWERKER: 'Medewerker',
@@ -19,10 +20,12 @@ const roleLabels: Record<string, string> = {
 export default function AdminPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const canManage = useAuth((s) => s.hasRole('FACILITAIR_MANAGER', 'ADMIN'));
 
   const { data, isLoading } = useQuery<PaginatedResponse<User>>({
     queryKey: ['users', page],
     queryFn: () => apiGet('/api/users', { page, limit: 20 }),
+    enabled: canManage,
   });
 
   const updateRole = useMutation({
@@ -36,6 +39,19 @@ export default function AdminPage() {
       toast.error('Kon rol niet bijwerken');
     },
   });
+
+  if (!canManage) {
+    return (
+      <AppLayout>
+        <div className="card text-center">
+          <h1 className="text-lg font-semibold text-gray-900">Geen toegang</h1>
+          <p className="mt-2 text-sm text-gray-500">
+            Je hebt geen rechten om gebruikersbeheer te bekijken.
+          </p>
+        </div>
+      </AppLayout>
+    );
+  }
 
   const columns = [
     {

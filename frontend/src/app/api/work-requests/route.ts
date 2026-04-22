@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { httpErrorResponse, requireAuth } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const authed = await requireAuth(request);
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -24,6 +27,11 @@ export async function GET(request: NextRequest) {
         { description: { contains: search, mode: 'insensitive' } },
         { requestNumber: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    // MEDEWERKER sees only their own requests; other roles see all.
+    if (authed.role === 'MEDEWERKER') {
+      where.requestedById = authed.id;
     }
 
     const [data, total] = await Promise.all([
@@ -48,6 +56,8 @@ export async function GET(request: NextRequest) {
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
+    const resp = httpErrorResponse(error);
+    if (resp) return resp;
     console.error('Work requests GET error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
@@ -55,10 +65,17 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const authed = await requireAuth(request);
     const body = await request.json();
     const { title, description, campusId, locationId, categoryId, priority } = body;
 
-    // Generate request number
+    if (!title || !description || !campusId) {
+      return NextResponse.json(
+        { message: 'title, description and campusId are required' },
+        { status: 400 },
+      );
+    }
+
     const year = new Date().getFullYear();
     const count = await prisma.workRequest.count({
       where: {
@@ -70,25 +87,12 @@ export async function POST(request: NextRequest) {
     });
     const requestNumber = `WR-${year}-${String(count + 1).padStart(4, '0')}`;
 
-    // Get first user as fallback (in production, get from JWT)
-    let user = await prisma.user.findFirst();
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          azureAdId: 'system',
-          email: 'system@handyman.local',
-          displayName: 'Systeem',
-          role: 'ADMIN',
-        },
-      });
-    }
-
     const workRequest = await prisma.workRequest.create({
       data: {
         requestNumber,
         title,
         description,
-        requestedById: user.id,
+        requestedById: authed.id,
         campusId,
         locationId: locationId || undefined,
         categoryId: categoryId || undefined,
@@ -103,6 +107,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(workRequest, { status: 201 });
   } catch (error) {
+    const resp = httpErrorResponse(error);
+    if (resp) return resp;
     console.error('Work requests POST error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { httpErrorResponse, requireAuth } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const authed = await requireAuth(request);
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -21,6 +24,11 @@ export async function GET(request: NextRequest) {
         { title: { contains: search, mode: 'insensitive' } },
         { purchaseNumber: { contains: search, mode: 'insensitive' } },
       ];
+    }
+
+    // MEDEWERKER sees only their own purchases; other roles see all.
+    if (authed.role === 'MEDEWERKER') {
+      where.requestedById = authed.id;
     }
 
     const [data, total] = await Promise.all([
@@ -44,6 +52,8 @@ export async function GET(request: NextRequest) {
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
+    const resp = httpErrorResponse(error);
+    if (resp) return resp;
     console.error('Purchases GET error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
@@ -51,7 +61,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const authed = await requireAuth(request);
     const body = await request.json();
+
+    if (!body.title || typeof body.estimatedCost !== 'number') {
+      return NextResponse.json(
+        { message: 'title and estimatedCost are required' },
+        { status: 400 },
+      );
+    }
 
     const year = new Date().getFullYear();
     const count = await prisma.purchaseRequest.count({
@@ -64,11 +82,6 @@ export async function POST(request: NextRequest) {
     });
     const purchaseNumber = `AK-${year}-${String(count + 1).padStart(4, '0')}`;
 
-    let user = await prisma.user.findFirst();
-    if (!user) {
-      return NextResponse.json({ message: 'No users found' }, { status: 400 });
-    }
-
     const SMALL_LIMIT = 500;
     const type = body.estimatedCost <= SMALL_LIMIT ? 'KLEIN' : 'GROOT';
     const status = type === 'KLEIN' ? 'GOEDGEKEURD' : 'WACHT_OP_GOEDKEURING';
@@ -78,7 +91,7 @@ export async function POST(request: NextRequest) {
         purchaseNumber,
         title: body.title,
         description: body.description,
-        requestedById: user.id,
+        requestedById: authed.id,
         workRequestId: body.workRequestId || undefined,
         taskId: body.taskId || undefined,
         projectId: body.projectId || undefined,
@@ -94,6 +107,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(purchase, { status: 201 });
   } catch (error) {
+    const resp = httpErrorResponse(error);
+    if (resp) return resp;
     console.error('Purchases POST error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { httpErrorResponse, requireRole } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    await requireRole(request, 'FACILITAIR_MANAGER', 'ADMIN');
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -44,6 +47,8 @@ export async function GET(request: NextRequest) {
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
+    const resp = httpErrorResponse(error);
+    if (resp) return resp;
     console.error('Users GET error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }

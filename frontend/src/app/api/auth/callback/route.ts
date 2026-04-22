@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { signAuthToken } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -136,7 +137,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const token = btoa(user.id);
+    const token = await signAuthToken({
+      id: user.id,
+      role: user.role,
+      email: user.email,
+    });
     return NextResponse.redirect(new URL(`/login?token=${token}`, request.url));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

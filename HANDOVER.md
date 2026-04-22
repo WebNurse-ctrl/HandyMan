@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.0
+# HandyMan - Project Handover Document v1.1
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -132,7 +132,7 @@ Login knop → /api/auth/login → redirect naar Microsoft login
 → /api/auth/me haalt user data op bij elke paginalading
 ```
 
-**Token**: simpele base64-encoding van de user UUID. Wordt meegestuurd als `Authorization: Bearer <token>` header.
+**Token** (v1.1+): gesigneerde **JWT (HS256)** met 8u geldigheidsduur. Geheim via `AUTH_SECRET` env var (min. 32 tekens). Payload bevat `sub` (user id), `role` en `email`. Claims: `iss=handyman`, `aud=handyman-web`. Wordt meegestuurd als `Authorization: Bearer <token>` header. De rol zit in de token zodat RBAC checks geen DB-hit nodig hebben; na een rolwijziging moet de gebruiker opnieuw inloggen of wachten tot de token verloopt (max 8u).
 
 **Rol-detectie**: bij eerste login wordt de rol afgeleid uit het Azure AD jobTitle veld:
 - Bevat "facilitair"/"facility" → FACILITAIR_MANAGER
@@ -153,7 +153,14 @@ Login knop → /api/auth/login → redirect naar Microsoft login
 | Grote aankopen (>5000) goedkeuren | | | | x | x |
 | Gebruikers/rollen beheren | | | | x | x |
 
-**Let op**: de RBAC guards zitten momenteel alleen in de NestJS backend code (`backend/`). De Next.js API routes hebben nog geen strikte role-checking - dit is een v1.1 taak.
+**RBAC enforcement (v1.1+)**: alle Next.js API routes verifiëren de JWT en controleren de rol via `requireAuth()` / `requireRole()` uit `frontend/src/lib/auth-server.ts`. Specifiek:
+
+- `MEDEWERKER` ziet alleen eigen `work-requests` en eigen `purchases`, en enkel aan zichzelf toegewezen `tasks`.
+- `POST /api/tasks` vereist `TECHNISCHE_DIENST` of hoger.
+- `POST /api/projects` vereist `DIENSTHOOFD` of hoger.
+- `GET /api/users` en `PATCH /api/users/[id]/role` vereisen `FACILITAIR_MANAGER` of `ADMIN`.
+- Enkel een `ADMIN` kan de `ADMIN` rol toekennen of een bestaande ADMIN wijzigen.
+- Een gebruiker kan zijn eigen rol niet wijzigen.
 
 ## API Routes Overzicht
 
@@ -171,7 +178,8 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/api/notifications` | GET | Lijst notificaties |
 | `/api/notifications/count` | GET | Ongelezen aantal |
 | `/api/notifications/read-all` | PATCH | Alles als gelezen markeren |
-| `/api/users` | GET | Gebruikerslijst met paginering |
+| `/api/users` | GET | Gebruikerslijst met paginering (FACILITAIR_MANAGER+) |
+| `/api/users/[id]/role` | PATCH | Rol wijzigen (FACILITAIR_MANAGER+; alleen ADMIN mag ADMIN toekennen) |
 | `/api/users/technical-staff` | GET | Technisch personeel |
 | `/api/campuses` | GET | Alle campussen |
 | `/api/categories` | GET | Alle categorieën |
@@ -213,25 +221,33 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `AZURE_AD_CLIENT_ID` | App registration client ID |
 | `AZURE_AD_CLIENT_SECRET` | App registration secret |
 | `AZURE_AD_REDIRECT_URI` | `https://handyman-eta-mocha.vercel.app/api/auth/callback` |
+| `AUTH_SECRET` | **v1.1+** - HMAC secret voor JWT signing (minimaal 32 tekens, random). Genereer met `openssl rand -base64 48`. |
 
-## Bekende Beperkingen in v1.0
+## Wijzigingen in v1.1
 
-Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.1:
+- **#1 RBAC enforcement op API routes** — opgelost. Alle Next.js API routes gaan nu door `requireAuth()` / `requireRole()`. Zie `frontend/src/lib/auth-server.ts` en de RBAC sectie hierboven.
+- **#10 Token security** — opgelost. Tokens zijn nu HS256-gesigneerde JWTs met 8u TTL; `AUTH_SECRET` env var is vereist.
+- Nieuw endpoint `PATCH /api/users/[id]/role` voor rolbeheer (was stuk in v1.0: de admin UI riep het aan, maar het bestond niet).
+- `/api/notifications/*` gebruikt nu de ingelogde gebruiker i.p.v. `prisma.user.findFirst()`.
+- De `prisma.user.findFirst()` fallbacks in POST-routes (work-requests, tasks, projects, purchases) zijn vervangen door de geauthenticeerde gebruiker.
 
-1. **RBAC enforcement op API routes**: de Next.js API routes controleren momenteel niet de gebruikersrol - iedereen met een geldig token kan alle endpoints aanroepen
-2. **Foto upload**: het formulier toont een upload area maar de daadwerkelijke file upload is nog niet geïmplementeerd
-3. **Detail pagina's**: er zijn geen `/work-requests/[id]`, `/tasks/[id]`, `/projects/[id]` detail pagina's
-4. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI
-5. **Commentaar systeem**: de comments tabel bestaat maar er is geen UI om comments toe te voegen
-6. **E-mail notificaties**: notificaties zijn alleen in-app, geen Microsoft Graph email integratie
-7. **Taak werkregistratie**: er is geen UI voor het logboek/werkregistratie bij taken
-8. **Zoekfunctie**: de globale zoekbalk in de navbar is niet functioneel
-9. **Mobile sidebar**: de hamburger menu toggle werkt niet op mobile
-10. **Token security**: het token is een simpele base64 van de user ID - niet cryptografisch veilig
-11. **Seed data**: de database is leeg (geen campussen, categorieën, demo data)
-12. **Goedkeuringsflow UI**: aankoop goedkeuren/afwijzen knoppen ontbreken in de UI
-13. **Budget alerts**: de budget overschrijding notificaties zijn niet geïmplementeerd
-14. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt niet op Vercel serverless
+## Openstaande Beperkingen
+
+Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor volgende versies:
+
+1. **Foto upload**: het formulier toont een upload area maar de daadwerkelijke file upload is nog niet geïmplementeerd
+2. **Detail pagina's**: er zijn geen `/work-requests/[id]`, `/tasks/[id]`, `/projects/[id]` detail pagina's
+3. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI
+4. **Commentaar systeem**: de comments tabel bestaat maar er is geen UI om comments toe te voegen
+5. **E-mail notificaties**: notificaties zijn alleen in-app, geen Microsoft Graph email integratie
+6. **Taak werkregistratie**: er is geen UI voor het logboek/werkregistratie bij taken
+7. **Zoekfunctie**: de globale zoekbalk in de navbar is niet functioneel
+8. **Mobile sidebar**: de hamburger menu toggle werkt niet op mobile
+9. **Seed data**: de database is leeg (geen campussen, categorieën, demo data)
+10. **Goedkeuringsflow UI**: aankoop goedkeuren/afwijzen knoppen ontbreken in de UI
+11. **Budget alerts**: de budget overschrijding notificaties zijn niet geïmplementeerd
+12. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt niet op Vercel serverless
+13. **Token revocation**: een rolwijziging is pas effectief nadat de gebruiker opnieuw inlogt of de token verloopt (max 8u). Voor onmiddellijke invalidering is een token-versie veld of server-side sessiestate nodig.
 
 ## Vercel Deployment Configuratie
 

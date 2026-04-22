@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthedUser } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
+    const authed = await getAuthedUser(request);
+    if (!authed) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    // Decode the simple token (userId encoded as base64)
-    let userId: string;
-    try {
-      userId = atob(token);
-    } catch {
-      return NextResponse.json({ message: 'Invalid token' }, { status: 401 });
-    }
-
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: authed.id },
       select: {
         id: true,
         email: true,
