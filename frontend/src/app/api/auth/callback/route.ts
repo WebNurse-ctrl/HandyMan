@@ -102,10 +102,6 @@ export async function GET(request: NextRequest) {
     });
 
     if (user) {
-      // Promote Johan Beckers to ADMIN / APPROVED on every login in case his
-      // account predates this feature.
-      const promoteJohan = isJohan && (user.role !== 'ADMIN' || user.status !== 'APPROVED');
-
       user = await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -116,13 +112,7 @@ export async function GET(request: NextRequest) {
           department: profile.department,
           jobTitle: profile.jobTitle,
           lastLoginAt: new Date(),
-          ...(promoteJohan
-            ? {
-                role: 'ADMIN',
-                status: 'APPROVED',
-                approvedAt: user.approvedAt ?? new Date(),
-              }
-            : {}),
+          ...(isJohan && user.role !== 'ADMIN' ? { role: 'ADMIN' } : {}),
         },
       });
     } else {
@@ -148,32 +138,9 @@ export async function GET(request: NextRequest) {
           department: profile.department,
           jobTitle: profile.jobTitle,
           role,
-          status: isJohan ? 'APPROVED' : 'PENDING',
-          approvedAt: isJohan ? new Date() : null,
           lastLoginAt: new Date(),
         },
       });
-
-      // Notify all administrators about the new pending signup.
-      if (!isJohan) {
-        const admins = await prisma.user.findMany({
-          where: { role: 'ADMIN', status: 'APPROVED' },
-          select: { id: true },
-        });
-
-        if (admins.length > 0) {
-          await prisma.notification.createMany({
-            data: admins.map((admin) => ({
-              userId: admin.id,
-              type: 'USER_APPROVAL_NEEDED' as const,
-              title: 'Nieuwe aanmelding wacht op goedkeuring',
-              message: `${user!.displayName} (${user!.email}) heeft zich aangemeld en wacht op goedkeuring.`,
-              entityType: 'user',
-              entityId: user!.id,
-            })),
-          });
-        }
-      }
     }
 
     const token = btoa(user.id);

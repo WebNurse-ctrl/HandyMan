@@ -20,34 +20,22 @@ enum UserRole {
   ADMIN
 }
 
-enum UserStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
 model User {
-  id              String     @id @default(uuid())
-  azureAdId       String     @unique @map("azure_ad_id")
-  email           String     @unique
-  displayName     String     @map("display_name")
-  firstName       String?    @map("first_name")
-  lastName        String?    @map("last_name")
+  id              String    @id @default(uuid())
+  azureAdId       String    @unique @map("azure_ad_id")
+  email           String    @unique
+  displayName     String    @map("display_name")
+  firstName       String?   @map("first_name")
+  lastName        String?   @map("last_name")
   department      String?
-  jobTitle        String?    @map("job_title")
+  jobTitle        String?   @map("job_title")
   phone           String?
-  avatarUrl       String?    @map("avatar_url")
-  role            UserRole   @default(MEDEWERKER)
-  status          UserStatus @default(PENDING)
-  isActive        Boolean    @default(true) @map("is_active")
-  lastLoginAt     DateTime?  @map("last_login_at")
-  approvedAt      DateTime?  @map("approved_at")
-  approvedById    String?    @map("approved_by_id")
-  createdAt       DateTime   @default(now()) @map("created_at")
-  updatedAt       DateTime   @updatedAt @map("updated_at")
-
-  approvedBy           User?              @relation("UserApprovals", fields: [approvedById], references: [id])
-  approvedUsers        User[]             @relation("UserApprovals")
+  avatarUrl       String?   @map("avatar_url")
+  role            UserRole  @default(MEDEWERKER)
+  isActive        Boolean   @default(true) @map("is_active")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   workRequests         WorkRequest[]      @relation("RequestedBy")
   assignedTasks        Task[]             @relation("AssignedTo")
@@ -427,8 +415,6 @@ enum NotificationType {
   PURCHASE_REJECTED
   PROJECT_BUDGET_ALERT
   COMMENT_ADDED
-  USER_APPROVAL_NEEDED
-  USER_APPROVED
 }
 
 model Notification {

@@ -1,4 +1,4 @@
--- HandyMan v1.2 - volledig Supabase rebuild script
+-- HandyMan - volledig Supabase rebuild script
 -- Drop alles + maak schema opnieuw conform frontend/prisma/schema.prisma
 -- WAARSCHUWING: alle data gaat verloren. Enkel gebruiken op lege of
 -- corrupte DBs. Uitvoeren via Supabase SQL Editor.
@@ -33,7 +33,6 @@ DROP TYPE IF EXISTS "ProjectStatus"      CASCADE;
 DROP TYPE IF EXISTS "TaskStatus"         CASCADE;
 DROP TYPE IF EXISTS "Priority"           CASCADE;
 DROP TYPE IF EXISTS "WorkRequestStatus"  CASCADE;
-DROP TYPE IF EXISTS "UserStatus"         CASCADE;
 DROP TYPE IF EXISTS "UserRole"           CASCADE;
 
 -- =========================================================================
@@ -42,7 +41,6 @@ DROP TYPE IF EXISTS "UserRole"           CASCADE;
 CREATE TYPE "UserRole" AS ENUM (
   'MEDEWERKER', 'TECHNISCHE_DIENST', 'DIENSTHOOFD', 'FACILITAIR_MANAGER', 'ADMIN'
 );
-CREATE TYPE "UserStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
 CREATE TYPE "WorkRequestStatus" AS ENUM (
   'INGEDIEND', 'IN_BEHANDELING', 'GOEDGEKEURD', 'AFGEWERKT', 'GEWEIGERD'
 );
@@ -60,8 +58,7 @@ CREATE TYPE "NotificationType" AS ENUM (
   'WORK_REQUEST_CREATED', 'WORK_REQUEST_STATUS_CHANGED',
   'TASK_ASSIGNED', 'TASK_STATUS_CHANGED', 'TASK_DEADLINE_APPROACHING',
   'PURCHASE_APPROVAL_NEEDED', 'PURCHASE_APPROVED', 'PURCHASE_REJECTED',
-  'PROJECT_BUDGET_ALERT', 'COMMENT_ADDED',
-  'USER_APPROVAL_NEEDED', 'USER_APPROVED'
+  'PROJECT_BUDGET_ALERT', 'COMMENT_ADDED'
 );
 
 -- =========================================================================
@@ -78,16 +75,11 @@ CREATE TABLE users (
   job_title       TEXT,
   phone           TEXT,
   avatar_url      TEXT,
-  role            "UserRole"   NOT NULL DEFAULT 'MEDEWERKER',
-  status          "UserStatus" NOT NULL DEFAULT 'PENDING',
+  role            "UserRole" NOT NULL DEFAULT 'MEDEWERKER',
   is_active       BOOLEAN NOT NULL DEFAULT TRUE,
   last_login_at   TIMESTAMP,
-  approved_at     TIMESTAMP,
-  approved_by_id  TEXT,
   created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-  CONSTRAINT users_approved_by_id_fkey
-    FOREIGN KEY (approved_by_id) REFERENCES users(id)
+  updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- =========================================================================

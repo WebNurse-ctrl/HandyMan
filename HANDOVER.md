@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.2
+# HandyMan - Project Handover Document v1.2.1
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -13,7 +13,7 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Microsoft Entra ID (Azure AD) SSO
 - **Repo**: github.com/WebNurse-ctrl/HandyMan
-- **Branch**: `claude/fix-admin-panel-HyGll` (v1.2)
+- **Branch**: `claude/fix-admin-panel-HyGll` (v1.2.1 — approval-flow teruggedraaid, alleen admin rol-beheer blijft)
 
 ## Tech Stack
 
@@ -51,12 +51,11 @@ HandyMan/
 │   │   │   │   ├── projects/
 │   │   │   │   ├── purchases/
 │   │   │   │   ├── tasks/
-│   │   │   │   ├── users/      # list, pending, [id]/role, [id]/approve, technical-staff
+│   │   │   │   ├── users/      # list, [id]/role, technical-staff
 │   │   │   │   └── work-requests/
-│   │   │   ├── admin/          # Admin panel (goedkeuringen + rollen)
+│   │   │   ├── admin/          # Admin panel (gebruikerslijst + rol-dropdown)
 │   │   │   ├── dashboard/      # Dashboard met KPIs
 │   │   │   ├── login/          # Microsoft SSO login
-│   │   │   ├── pending/        # Wachtpagina voor nog niet goedgekeurde users (v1.2)
 │   │   │   ├── projects/       # Project overzicht (kaarten)
 │   │   │   ├── purchases/      # Aankopen lijst
 │   │   │   ├── tasks/          # Taken lijst
@@ -72,12 +71,11 @@ HandyMan/
 │   │   │   └── useNotifications.ts
 │   │   ├── lib/
 │   │   │   ├── api.ts          # Axios instance met JWT interceptor
-│   │   │   ├── auth-server.ts  # getUserFromRequest(), requireAdmin(), isAdminIdentity() (v1.2)
-│   │   │   ├── email.ts        # Microsoft Graph sendMail helper (v1.2)
+│   │   │   ├── auth-server.ts  # getUserFromRequest(), requireAdmin(), isAdminIdentity()
 │   │   │   ├── prisma.ts       # Prisma client singleton
 │   │   │   └── utils.ts        # cn(), formatDate(), getStatusColor(), etc.
 │   │   └── types/
-│   │       └── index.ts        # Alle TypeScript interfaces (User, UserStatus, ...)
+│   │       └── index.ts        # Alle TypeScript interfaces
 │   ├── .eslintrc.json
 │   ├── next.config.js
 │   ├── tailwind.config.js
@@ -90,11 +88,11 @@ HandyMan/
 
 ## Database Schema (Prisma)
 
-**16 tabellen** in `frontend/prisma/schema.prisma`:
+**15 tabellen** in `frontend/prisma/schema.prisma`:
 
 | Tabel | Beschrijving |
 |-------|-------------|
-| `users` | Gebruikers via Azure AD SSO. Velden: azureAdId, email, displayName, department, jobTitle, role, **status** (PENDING/APPROVED/REJECTED, v1.2), **approvedAt**, **approvedById** (self-FK). |
+| `users` | Gebruikers via Azure AD SSO. Velden: azureAdId, email, displayName, department, jobTitle, role, isActive. |
 | `campuses` | Campuslocaties (naam, code, adres, stad) |
 | `locations` | Locaties binnen een campus (gebouw, verdieping, ruimte) |
 | `categories` | Categorieën met hiërarchie (self-referencing parentId) |
@@ -107,7 +105,7 @@ HandyMan/
 | `purchase_approvals` | Goedkeuringsregistratie per aankoop |
 | `comments` | Polymorf: gekoppeld aan work_request, task, of project |
 | `attachments` | Bestanden gekoppeld aan aanvragen/taken/projecten/aankopen |
-| `notifications` | In-app notificaties per gebruiker. Types incl. `USER_APPROVAL_NEEDED` en `USER_APPROVED` (v1.2). |
+| `notifications` | In-app notificaties per gebruiker |
 | `system_config` | Key-value systeeminstellingen |
 | `audit_logs` | Audit trail van alle wijzigingen |
 
@@ -119,7 +117,6 @@ HandyMan/
 ### Enums
 
 - **UserRole**: MEDEWERKER, TECHNISCHE_DIENST, DIENSTHOOFD, FACILITAIR_MANAGER, ADMIN
-- **UserStatus**: PENDING, APPROVED, REJECTED (v1.2)
 - **WorkRequestStatus**: INGEDIEND, IN_BEHANDELING, GOEDGEKEURD, AFGEWERKT, GEWEIGERD
 - **Priority**: LAAG, NORMAAL, HOOG, URGENT
 - **TaskStatus**: OPEN, IN_UITVOERING, AFGEWERKT, ON_HOLD
@@ -148,13 +145,10 @@ Login knop → /api/auth/login → redirect naar Microsoft login
 - Bevat "diensthoofd"/"hoofd" → DIENSTHOOFD
 - Bevat "technisch"/"onderhoud" → TECHNISCHE_DIENST
 - Anders → MEDEWERKER
-- DisplayName "Johan Beckers" → ADMIN (automatisch goedgekeurd)
+- DisplayName "Johan Beckers" (of email `johan.beckers@...`) → ADMIN
 
-**Goedkeuringsflow (v1.2)**: nieuwe gebruikers krijgen `status = PENDING` bij aanmelden.
-Zij zien `/pending` tot een admin hen goedkeurt via `/admin`. Admins krijgen een
-in-app notificatie (type `USER_APPROVAL_NEEDED`). Na goedkeuring krijgt de
-gebruiker een e-mail via Microsoft Graph `sendMail` (application permission
-`Mail.Send`, verzonden vanuit `AZURE_AD_MAIL_SENDER`) en `status = APPROVED`.
+Iedere medewerker kan direct aanmelden en werkaanvragen indienen — er is
+geen goedkeuringsflow. De admin kan achteraf de rol aanpassen via `/admin`.
 
 ## Rollen & Rechten (RBAC)
 
@@ -193,9 +187,7 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/api/notifications/count` | GET | Ongelezen aantal |
 | `/api/notifications/read-all` | PATCH | Alles als gelezen markeren |
 | `/api/users` | GET | Gebruikerslijst met paginering (admin-only) |
-| `/api/users/pending` | GET | Lijst aanmeldingen die wachten op goedkeuring (admin-only) |
 | `/api/users/[id]/role` | PATCH | Rol van gebruiker bijwerken (admin-only) |
-| `/api/users/[id]/approve` | POST | Aanmelding goedkeuren + e-mail (admin-only) |
 | `/api/users/technical-staff` | GET | Technisch personeel |
 | `/api/campuses` | GET | Alle campussen |
 | `/api/categories` | GET | Alle categorieën |
@@ -218,8 +210,7 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/tasks` | tasks/page.tsx | Tabel met toewijzing, deadline, status |
 | `/projects` | projects/page.tsx | Kaartweergave met budgetvoortgang |
 | `/purchases` | purchases/page.tsx | Tabel met bedrag, type, goedkeuringsstatus |
-| `/admin` | admin/page.tsx | Admin-only. Tabs: "Nieuwe aanmeldingen" + "Alle gebruikers" met rol-dropdown |
-| `/pending` | pending/page.tsx | Landingspagina voor gebruikers die wachten op goedkeuring |
+| `/admin` | admin/page.tsx | Admin-only. Gebruikerslijst met rol-dropdown |
 
 ## UI Design Systeem
 
@@ -238,59 +229,68 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `AZURE_AD_CLIENT_ID` | App registration client ID |
 | `AZURE_AD_CLIENT_SECRET` | App registration secret |
 | `AZURE_AD_REDIRECT_URI` | `https://handyman-eta-mocha.vercel.app/api/auth/callback` |
-| `AZURE_AD_MAIL_SENDER` | (v1.2) UPN/mailbox van waaruit goedkeuringsmails verstuurd worden. Vereist `Mail.Send` application permission op de Azure AD app. Zonder deze variabele slaagt de goedkeuring nog steeds maar wordt er geen e-mail verstuurd. |
 
-## Wijzigingen in v1.2 (branch `claude/fix-admin-panel-HyGll`)
+## Wijzigingen in v1.2.1 (branch `claude/fix-admin-panel-HyGll`)
 
-### Functioneel
-- **Gebruikers goedkeuringsflow**: nieuwe users worden `PENDING`, admin moet
-  goedkeuren (`/admin` → tab "Nieuwe aanmeldingen"). Pending users zien de
-  `/pending` landingspagina met een "Opnieuw controleren"-knop; na goedkeuring
-  worden ze bij de volgende fetch naar `/dashboard` gestuurd.
-- **Johan Beckers** (match op `displayName === "Johan Beckers"` of
-  `email LIKE 'johan.beckers@%'` in `lib/auth-server.ts::isAdminIdentity`)
-  wordt automatisch gepromoveerd naar `role=ADMIN`, `status=APPROVED` — zowel
-  bij nieuwe registratie als op elke volgende login (idempotent).
-- **Admin-notificaties**: bij elke nieuwe aanmelding krijgen alle
-  `ADMIN + APPROVED` users een `USER_APPROVAL_NEEDED` in-app notificatie.
-  Deze worden automatisch gemarkeerd als gelezen zodra de user goedgekeurd is.
-- **Goedkeuringse-mail**: bij approval wordt een HTML-mail verstuurd via
-  Microsoft Graph `sendMail` (client-credentials flow in `lib/email.ts`). Als
-  `AZURE_AD_MAIL_SENDER` of de `Mail.Send` application permission ontbreekt
-  slaagt de goedkeuring nog steeds en wordt er een waarschuwing gelogd.
-- **Sidebar "Beheer"** en `/admin` zijn nu enkel toegankelijk voor `ADMIN`.
-  Andere rollen worden op `/admin` redirect naar `/dashboard`.
+### Huidige staat
+- **Admin panel werkt**: Johan Beckers wordt bij login automatisch
+  gepromoveerd naar `role=ADMIN` (match op `displayName === "Johan Beckers"`
+  of email-prefix `johan.beckers@` via `lib/auth-server.ts::isAdminIdentity`).
+  Op `/admin` kan hij de rol van andere gebruikers aanpassen via een dropdown.
+- **Sidebar "Beheer"** en `/admin` zijn enkel toegankelijk voor `ADMIN`.
 - **Self-demote bescherming**: een admin kan zichzelf niet tot lagere rol
-  zetten als er geen andere ADMIN+APPROVED user bestaat.
+  zetten als er geen andere ADMIN user meer bestaat.
+- **Iedere medewerker kan direct aanmelden**: er is GEEN goedkeuringsflow —
+  nieuwe users landen direct op `/dashboard` en kunnen werkaanvragen
+  indienen met rol `MEDEWERKER` (of hogere rol als hun Azure AD jobTitle
+  daarop wijst).
 
-### Nieuwe / gewijzigde bestanden
-- **Nieuw**: `src/lib/auth-server.ts`, `src/lib/email.ts`,
-  `src/app/pending/page.tsx`,
-  `src/app/api/users/pending/route.ts`,
-  `src/app/api/users/[id]/role/route.ts`,
-  `src/app/api/users/[id]/approve/route.ts`.
-- **Gewijzigd**: `prisma/schema.prisma` (UserStatus enum, nieuwe velden,
-  notification types), `src/app/api/auth/callback/route.ts`,
-  `src/app/api/auth/me/route.ts`, `src/app/api/users/route.ts`,
-  `src/app/admin/page.tsx`, `src/app/login/page.tsx`,
-  `src/components/layout/AppLayout.tsx`, `src/components/layout/Sidebar.tsx`,
-  `src/types/index.ts`, `frontend/.env.example`.
+### v1.2 approval-flow (teruggedraaid)
+Een eerdere versie voegde een `UserStatus` + `/pending`-landingspagina toe
+die elke nieuwe aanmelding blokkeerde tot admin-goedkeuring. Dit is
+teruggedraaid omdat iedere medewerker werkaanvragen moet kunnen indienen
+zonder wachttijd. De rollback verwijderde:
+- `UserStatus` enum, `users.status/approvedAt/approvedById` kolommen
+- `USER_APPROVAL_NEEDED` en `USER_APPROVED` notification types
+- `/pending` pagina
+- `/api/users/pending` en `/api/users/[id]/approve` endpoints
+- `lib/email.ts` en `AZURE_AD_MAIL_SENDER` env var
+
+### Nieuwe / gewijzigde bestanden (t.o.v. v1.0)
+- **Nieuw**: `src/lib/auth-server.ts` (requireAdmin, isAdminIdentity),
+  `src/app/api/users/[id]/role/route.ts` (PATCH endpoint).
+- **Gewijzigd**: `prisma/schema.prisma` (geen; terug naar oorspronkelijk),
+  `src/app/api/auth/callback/route.ts` (Johan → ADMIN),
+  `src/app/api/users/route.ts` (admin-only),
+  `src/app/admin/page.tsx` (role-update via API),
+  `src/components/layout/Sidebar.tsx` ("Beheer" alleen voor ADMIN),
+  `src/types/index.ts`.
 
 ### Database migratie
-Er is **geen Prisma migratie** toegevoegd (het project heeft geen
-`prisma/migrations/`-map; er wordt gewerkt met `prisma db push`). Opties:
-1. **Incrementele migratie** (behoudt bestaande data): `npx prisma db push`
-   tegen de Supabase `DIRECT_URL`. Zet daarna handmatig alle reeds bestaande
-   users op `status='APPROVED'` om geen iemand uit te sluiten.
-2. **Volledige rebuild** (leeg de database): zie het `CREATE TABLE` script
-   onderaan dit document. Handig als de DB al in inconsistente staat is.
+Het Prisma schema is identiek aan v1.0 — geen migratie nodig als je al op
+v1.0 zat. Kwam je via de v1.2 approval-flow en heb je die in Supabase
+toegepast? Draai dan onderstaand rollback-script, of gebruik het volledige
+rebuild-script in [`docs/db-rebuild.sql`](docs/db-rebuild.sql) als de DB
+leeg mag:
 
-## Bekende Beperkingen (v1.2)
+```sql
+-- Rollback van de v1.2 approval-flow (behoudt alle data)
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_approved_by_id_fkey;
+ALTER TABLE users DROP COLUMN IF EXISTS status;
+ALTER TABLE users DROP COLUMN IF EXISTS approved_at;
+ALTER TABLE users DROP COLUMN IF EXISTS approved_by_id;
+DROP TYPE IF EXISTS "UserStatus";
+-- NotificationType waarden USER_APPROVAL_NEEDED / USER_APPROVED kunnen niet
+-- uit een Postgres enum verwijderd worden zonder de hele enum te
+-- herbouwen. Ze ongebruikt laten is veilig.
+```
+
+## Bekende Beperkingen
 
 Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.3+:
 
 1. **RBAC op niet-admin API routes**: alleen `/api/users*` heeft strikte
-   role-checking. De overige endpoints accepteren elke geldig token.
+   role-checking. De overige endpoints accepteren elk geldig token.
 2. **Foto upload**: het formulier toont een upload area maar de daadwerkelijke file upload is nog niet geïmplementeerd
 3. **Detail pagina's**: er zijn geen `/work-requests/[id]`, `/tasks/[id]`, `/projects/[id]` detail pagina's
 4. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI

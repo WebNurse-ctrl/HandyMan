@@ -6,8 +6,6 @@ export type UserRole =
   | 'FACILITAIR_MANAGER'
   | 'ADMIN';
 
-export type UserStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-
 export interface User {
   id: string;
   email: string;
@@ -18,7 +16,6 @@ export interface User {
   jobTitle?: string;
   phone?: string;
   role: UserRole;
-  status: UserStatus;
   avatarUrl?: string;
   lastLoginAt?: string;
   createdAt?: string;

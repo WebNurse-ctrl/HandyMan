@@ -8,24 +8,17 @@ import { useAuth } from '@/hooks/useAuth';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, fetchUser } = useAuth();
+  const { isAuthenticated, isLoading, fetchUser } = useAuth();
 
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
 
   useEffect(() => {
-    if (isLoading) return;
-
-    if (!isAuthenticated) {
+    if (!isLoading && !isAuthenticated) {
       router.push('/login');
-      return;
     }
-
-    if (user && user.status && user.status !== 'APPROVED') {
-      router.push('/pending');
-    }
-  }, [isLoading, isAuthenticated, user, router]);
+  }, [isLoading, isAuthenticated, router]);
 
   if (isLoading) {
     return (
@@ -39,10 +32,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return null;
-  }
-
-  if (user && user.status && user.status !== 'APPROVED') {
     return null;
   }
 

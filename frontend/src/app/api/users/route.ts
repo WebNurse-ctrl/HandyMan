@@ -36,7 +36,6 @@ export async function GET(request: NextRequest) {
           department: true,
           jobTitle: true,
           role: true,
-          status: true,
           avatarUrl: true,
           lastLoginAt: true,
         },

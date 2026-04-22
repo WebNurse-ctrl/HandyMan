@@ -41,7 +41,7 @@ export async function PATCH(
   // the last admin.
   if (target.id === auth.user.id && role !== 'ADMIN') {
     const otherAdmins = await prisma.user.count({
-      where: { role: 'ADMIN', status: 'APPROVED', id: { not: auth.user.id } },
+      where: { role: 'ADMIN', id: { not: auth.user.id } },
     });
     if (otherAdmins === 0) {
       return NextResponse.json(
@@ -59,7 +59,6 @@ export async function PATCH(
       email: true,
       displayName: true,
       role: true,
-      status: true,
     },
   });
 
