@@ -9,58 +9,90 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error');
 
   if (error) {
-    console.error('Azure AD error:', error, searchParams.get('error_description'));
-    return NextResponse.redirect(new URL('/login?error=azure_denied', request.url));
+    const desc = searchParams.get('error_description') || 'Unknown error';
+    return NextResponse.redirect(
+      new URL(`/login?error=azure_denied&detail=${encodeURIComponent(desc)}`, request.url),
+    );
   }
 
   if (!code) {
     return NextResponse.redirect(new URL('/login?error=no_code', request.url));
   }
 
-  try {
-    const tenantId = process.env.AZURE_AD_TENANT_ID;
-    const clientId = process.env.AZURE_AD_CLIENT_ID;
-    const clientSecret = process.env.AZURE_AD_CLIENT_SECRET;
-    const redirectUri = process.env.AZURE_AD_REDIRECT_URI;
+  const tenantId = process.env.AZURE_AD_TENANT_ID;
+  const clientId = process.env.AZURE_AD_CLIENT_ID;
+  const clientSecret = process.env.AZURE_AD_CLIENT_SECRET;
+  const redirectUri = process.env.AZURE_AD_REDIRECT_URI;
 
-    // Exchange authorization code for tokens
+  if (!tenantId || !clientId || !clientSecret || !redirectUri) {
+    return NextResponse.redirect(
+      new URL('/login?error=config_missing&detail=' + encodeURIComponent(
+        `Missing: ${!tenantId ? 'TENANT_ID ' : ''}${!clientId ? 'CLIENT_ID ' : ''}${!clientSecret ? 'CLIENT_SECRET ' : ''}${!redirectUri ? 'REDIRECT_URI' : ''}`
+      ), request.url),
+    );
+  }
+
+  // Step 1: Exchange authorization code for tokens
+  let tokens;
+  try {
     const tokenResponse = await fetch(
       `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          client_id: clientId!,
-          client_secret: clientSecret!,
+          client_id: clientId,
+          client_secret: clientSecret,
           code,
-          redirect_uri: redirectUri!,
+          redirect_uri: redirectUri,
           grant_type: 'authorization_code',
           scope: 'openid profile email User.Read',
         }),
       },
     );
 
+    const tokenData = await tokenResponse.json();
+
     if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.text();
-      console.error('Token exchange failed:', errorData);
-      return NextResponse.redirect(new URL('/login?error=token_failed', request.url));
+      return NextResponse.redirect(
+        new URL(`/login?error=token_failed&detail=${encodeURIComponent(
+          tokenData.error_description || tokenData.error || 'Token exchange failed'
+        )}`, request.url),
+      );
     }
 
-    const tokens = await tokenResponse.json();
+    tokens = tokenData;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.redirect(
+      new URL(`/login?error=token_exception&detail=${encodeURIComponent(msg)}`, request.url),
+    );
+  }
 
-    // Fetch user profile from Microsoft Graph
+  // Step 2: Fetch user profile from Microsoft Graph
+  let profile;
+  try {
     const graphResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
 
     if (!graphResponse.ok) {
-      console.error('Graph API failed:', await graphResponse.text());
-      return NextResponse.redirect(new URL('/login?error=graph_failed', request.url));
+      const graphError = await graphResponse.text();
+      return NextResponse.redirect(
+        new URL(`/login?error=graph_failed&detail=${encodeURIComponent(graphError)}`, request.url),
+      );
     }
 
-    const profile = await graphResponse.json();
+    profile = await graphResponse.json();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.redirect(
+      new URL(`/login?error=graph_exception&detail=${encodeURIComponent(msg)}`, request.url),
+    );
+  }
 
-    // Find or create user in database
+  // Step 3: Create or update user in database
+  try {
     let user = await prisma.user.findUnique({
       where: { azureAdId: profile.id },
     });
@@ -79,7 +111,6 @@ export async function GET(request: NextRequest) {
         },
       });
     } else {
-      // Determine role based on job title
       let role: 'MEDEWERKER' | 'TECHNISCHE_DIENST' | 'DIENSTHOOFD' | 'FACILITAIR_MANAGER' = 'MEDEWERKER';
       const jobTitle = (profile.jobTitle || '').toLowerCase();
       if (jobTitle.includes('facilitair') || jobTitle.includes('facility')) {
@@ -105,14 +136,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Create a simple token (base64 encoded user ID)
     const token = btoa(user.id);
-
+    return NextResponse.redirect(new URL(`/login?token=${token}`, request.url));
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.redirect(
-      new URL(`/login?token=${token}`, request.url),
+      new URL(`/login?error=db_failed&detail=${encodeURIComponent(msg)}`, request.url),
     );
-  } catch (error) {
-    console.error('Auth callback error:', error);
-    return NextResponse.redirect(new URL('/login?error=auth_failed', request.url));
   }
 }

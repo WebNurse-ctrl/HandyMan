@@ -5,10 +5,25 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
+const errorMessages: Record<string, string> = {
+  azure_denied: 'Toegang geweigerd door Microsoft',
+  no_code: 'Geen autorisatiecode ontvangen',
+  config_missing: 'Azure AD configuratie ontbreekt op de server',
+  token_failed: 'Token uitwisseling met Microsoft mislukt',
+  token_exception: 'Fout bij verbinden met Microsoft',
+  graph_failed: 'Kon gebruikersprofiel niet ophalen',
+  graph_exception: 'Fout bij ophalen gebruikersprofiel',
+  db_failed: 'Database fout bij aanmaken gebruiker',
+  auth_failed: 'Authenticatie mislukt',
+};
+
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setAuth, isAuthenticated } = useAuth();
+
+  const errorCode = searchParams.get('error');
+  const errorDetail = searchParams.get('detail');
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -64,6 +79,19 @@ function LoginContent() {
           <p className="mt-2 text-sm text-gray-500">
             Facility Management Platform
           </p>
+
+          {errorCode && (
+            <div className="mt-4 rounded-lg bg-danger-50 border border-danger-200 p-4 text-left">
+              <p className="text-sm font-medium text-danger-700">
+                {errorMessages[errorCode] || 'Onbekende fout'}
+              </p>
+              {errorDetail && (
+                <p className="mt-2 text-xs text-danger-600 break-all">
+                  {errorDetail}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="mt-8">
             <button
