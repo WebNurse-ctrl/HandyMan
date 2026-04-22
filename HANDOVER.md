@@ -39,7 +39,7 @@ HandyMan/
 ├── backend/                    # LEGACY - niet in gebruik op Vercel
 ├── frontend/                   # DE ACTIEVE APP (Vercel Root Directory)
 │   ├── prisma/
-│   │   └── schema.prisma       # Database schema (15 tabellen)
+│   │   └── schema.prisma       # Database schema (16 tabellen)
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── api/            # Serverless API routes (backend)
@@ -51,11 +51,12 @@ HandyMan/
 │   │   │   │   ├── projects/
 │   │   │   │   ├── purchases/
 │   │   │   │   ├── tasks/
-│   │   │   │   ├── users/      # list, technical-staff
+│   │   │   │   ├── users/      # list, pending, [id]/role, [id]/approve, technical-staff
 │   │   │   │   └── work-requests/
-│   │   │   ├── admin/          # Gebruikersbeheer pagina
+│   │   │   ├── admin/          # Admin panel (goedkeuringen + rollen)
 │   │   │   ├── dashboard/      # Dashboard met KPIs
 │   │   │   ├── login/          # Microsoft SSO login
+│   │   │   ├── pending/        # Wachtpagina voor nog niet goedgekeurde users (v1.2)
 │   │   │   ├── projects/       # Project overzicht (kaarten)
 │   │   │   ├── purchases/      # Aankopen lijst
 │   │   │   ├── tasks/          # Taken lijst
@@ -71,10 +72,12 @@ HandyMan/
 │   │   │   └── useNotifications.ts
 │   │   ├── lib/
 │   │   │   ├── api.ts          # Axios instance met JWT interceptor
+│   │   │   ├── auth-server.ts  # getUserFromRequest(), requireAdmin(), isAdminIdentity() (v1.2)
+│   │   │   ├── email.ts        # Microsoft Graph sendMail helper (v1.2)
 │   │   │   ├── prisma.ts       # Prisma client singleton
 │   │   │   └── utils.ts        # cn(), formatDate(), getStatusColor(), etc.
 │   │   └── types/
-│   │       └── index.ts        # Alle TypeScript interfaces
+│   │       └── index.ts        # Alle TypeScript interfaces (User, UserStatus, ...)
 │   ├── .eslintrc.json
 │   ├── next.config.js
 │   ├── tailwind.config.js
@@ -87,11 +90,11 @@ HandyMan/
 
 ## Database Schema (Prisma)
 
-**15 tabellen** in `frontend/prisma/schema.prisma`:
+**16 tabellen** in `frontend/prisma/schema.prisma`:
 
 | Tabel | Beschrijving |
 |-------|-------------|
-| `users` | Gebruikers via Azure AD SSO. Velden: azureAdId, email, displayName, department, jobTitle, role, etc. |
+| `users` | Gebruikers via Azure AD SSO. Velden: azureAdId, email, displayName, department, jobTitle, role, **status** (PENDING/APPROVED/REJECTED, v1.2), **approvedAt**, **approvedById** (self-FK). |
 | `campuses` | Campuslocaties (naam, code, adres, stad) |
 | `locations` | Locaties binnen een campus (gebouw, verdieping, ruimte) |
 | `categories` | Categorieën met hiërarchie (self-referencing parentId) |
@@ -104,9 +107,14 @@ HandyMan/
 | `purchase_approvals` | Goedkeuringsregistratie per aankoop |
 | `comments` | Polymorf: gekoppeld aan work_request, task, of project |
 | `attachments` | Bestanden gekoppeld aan aanvragen/taken/projecten/aankopen |
-| `notifications` | In-app notificaties per gebruiker |
+| `notifications` | In-app notificaties per gebruiker. Types incl. `USER_APPROVAL_NEEDED` en `USER_APPROVED` (v1.2). |
 | `system_config` | Key-value systeeminstellingen |
 | `audit_logs` | Audit trail van alle wijzigingen |
+
+> **Database gotcha**: Prisma's `String @id @default(uuid())` wordt in Postgres
+> aangemaakt als **`TEXT`** kolom (niet `UUID`). Alle foreign keys die naar
+> `users.id` verwijzen moeten dus ook `TEXT` zijn. Zie ook het volledige
+> rebuild-script in `docs/db-rebuild.sql` / onderaan dit document.
 
 ### Enums
 
@@ -161,7 +169,12 @@ gebruiker een e-mail via Microsoft Graph `sendMail` (application permission
 | Grote aankopen (>5000) goedkeuren | | | | x | x |
 | Gebruikers/rollen beheren | | | | x | x |
 
-**Let op**: de RBAC guards zitten momenteel alleen in de NestJS backend code (`backend/`). De Next.js API routes hebben nog geen strikte role-checking - dit is een v1.1 taak.
+**RBAC status**:
+- De admin-endpoints (`/api/users*`) gebruiken sinds v1.2 `requireAdmin()` uit
+  `lib/auth-server.ts` voor een echte role-check.
+- De overige endpoints (work-requests, tasks, projects, purchases,
+  dashboard, notifications) vertrouwen nog steeds enkel op een geldig token
+  en hebben nog geen strikte role-enforcement. Dit is nog openstaand werk.
 
 ## API Routes Overzicht
 
@@ -227,43 +240,73 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `AZURE_AD_REDIRECT_URI` | `https://handyman-eta-mocha.vercel.app/api/auth/callback` |
 | `AZURE_AD_MAIL_SENDER` | (v1.2) UPN/mailbox van waaruit goedkeuringsmails verstuurd worden. Vereist `Mail.Send` application permission op de Azure AD app. Zonder deze variabele slaagt de goedkeuring nog steeds maar wordt er geen e-mail verstuurd. |
 
-## Wijzigingen in v1.2
+## Wijzigingen in v1.2 (branch `claude/fix-admin-panel-HyGll`)
 
+### Functioneel
 - **Gebruikers goedkeuringsflow**: nieuwe users worden `PENDING`, admin moet
-  goedkeuren (`/admin` → tab "Nieuwe aanmeldingen"). Pending users zien
-  `/pending` landingspagina.
-- **Johan Beckers** wordt automatisch herkend als `ADMIN` en `APPROVED` bij
-  login.
-- **Admin panel werkt**: nieuwe endpoints `PATCH /api/users/[id]/role`,
-  `POST /api/users/[id]/approve`, `GET /api/users/pending`. Admin endpoints
-  checken nu de rol via `requireAdmin()` (frontend `/api/users` GET is
-  admin-only geworden).
-- **E-mail via Microsoft Graph**: `sendMail` client-credentials flow in
-  `src/lib/email.ts`; nieuwe env var `AZURE_AD_MAIL_SENDER`.
-- **Sidebar "Beheer"** nu enkel zichtbaar voor `ADMIN` rol.
-- **Database schema wijziging**: voer `npx prisma db push` uit tegen
-  Supabase om de `users.status`, `users.approved_at`, `users.approved_by_id`
-  kolommen en de `UserStatus` enum + `USER_APPROVAL_NEEDED` /
-  `USER_APPROVED` notification types toe te voegen.
+  goedkeuren (`/admin` → tab "Nieuwe aanmeldingen"). Pending users zien de
+  `/pending` landingspagina met een "Opnieuw controleren"-knop; na goedkeuring
+  worden ze bij de volgende fetch naar `/dashboard` gestuurd.
+- **Johan Beckers** (match op `displayName === "Johan Beckers"` of
+  `email LIKE 'johan.beckers@%'` in `lib/auth-server.ts::isAdminIdentity`)
+  wordt automatisch gepromoveerd naar `role=ADMIN`, `status=APPROVED` — zowel
+  bij nieuwe registratie als op elke volgende login (idempotent).
+- **Admin-notificaties**: bij elke nieuwe aanmelding krijgen alle
+  `ADMIN + APPROVED` users een `USER_APPROVAL_NEEDED` in-app notificatie.
+  Deze worden automatisch gemarkeerd als gelezen zodra de user goedgekeurd is.
+- **Goedkeuringse-mail**: bij approval wordt een HTML-mail verstuurd via
+  Microsoft Graph `sendMail` (client-credentials flow in `lib/email.ts`). Als
+  `AZURE_AD_MAIL_SENDER` of de `Mail.Send` application permission ontbreekt
+  slaagt de goedkeuring nog steeds en wordt er een waarschuwing gelogd.
+- **Sidebar "Beheer"** en `/admin` zijn nu enkel toegankelijk voor `ADMIN`.
+  Andere rollen worden op `/admin` redirect naar `/dashboard`.
+- **Self-demote bescherming**: een admin kan zichzelf niet tot lagere rol
+  zetten als er geen andere ADMIN+APPROVED user bestaat.
 
-## Bekende Beperkingen in v1.0
+### Nieuwe / gewijzigde bestanden
+- **Nieuw**: `src/lib/auth-server.ts`, `src/lib/email.ts`,
+  `src/app/pending/page.tsx`,
+  `src/app/api/users/pending/route.ts`,
+  `src/app/api/users/[id]/role/route.ts`,
+  `src/app/api/users/[id]/approve/route.ts`.
+- **Gewijzigd**: `prisma/schema.prisma` (UserStatus enum, nieuwe velden,
+  notification types), `src/app/api/auth/callback/route.ts`,
+  `src/app/api/auth/me/route.ts`, `src/app/api/users/route.ts`,
+  `src/app/admin/page.tsx`, `src/app/login/page.tsx`,
+  `src/components/layout/AppLayout.tsx`, `src/components/layout/Sidebar.tsx`,
+  `src/types/index.ts`, `frontend/.env.example`.
 
-Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.1:
+### Database migratie
+Er is **geen Prisma migratie** toegevoegd (het project heeft geen
+`prisma/migrations/`-map; er wordt gewerkt met `prisma db push`). Opties:
+1. **Incrementele migratie** (behoudt bestaande data): `npx prisma db push`
+   tegen de Supabase `DIRECT_URL`. Zet daarna handmatig alle reeds bestaande
+   users op `status='APPROVED'` om geen iemand uit te sluiten.
+2. **Volledige rebuild** (leeg de database): zie het `CREATE TABLE` script
+   onderaan dit document. Handig als de DB al in inconsistente staat is.
 
-1. **RBAC enforcement op API routes**: de Next.js API routes controleren momenteel niet de gebruikersrol - iedereen met een geldig token kan alle endpoints aanroepen
+## Bekende Beperkingen (v1.2)
+
+Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.3+:
+
+1. **RBAC op niet-admin API routes**: alleen `/api/users*` heeft strikte
+   role-checking. De overige endpoints accepteren elke geldig token.
 2. **Foto upload**: het formulier toont een upload area maar de daadwerkelijke file upload is nog niet geïmplementeerd
 3. **Detail pagina's**: er zijn geen `/work-requests/[id]`, `/tasks/[id]`, `/projects/[id]` detail pagina's
 4. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI
 5. **Commentaar systeem**: de comments tabel bestaat maar er is geen UI om comments toe te voegen
-6. **E-mail notificaties**: notificaties zijn alleen in-app, geen Microsoft Graph email integratie
+6. **E-mail notificaties voor andere events**: enkel de goedkeuringsmail is
+   geïmplementeerd. Work-request/task/purchase events blijven in-app only.
 7. **Taak werkregistratie**: er is geen UI voor het logboek/werkregistratie bij taken
 8. **Zoekfunctie**: de globale zoekbalk in de navbar is niet functioneel
 9. **Mobile sidebar**: de hamburger menu toggle werkt niet op mobile
 10. **Token security**: het token is een simpele base64 van de user ID - niet cryptografisch veilig
 11. **Seed data**: de database is leeg (geen campussen, categorieën, demo data)
-12. **Goedkeuringsflow UI**: aankoop goedkeuren/afwijzen knoppen ontbreken in de UI
+12. **Goedkeuringsflow UI voor aankopen**: aankoop goedkeuren/afwijzen knoppen ontbreken in de UI
 13. **Budget alerts**: de budget overschrijding notificaties zijn niet geïmplementeerd
 14. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt niet op Vercel serverless
+15. **User rejection / deactivation**: de `REJECTED`-status bestaat in het
+    schema maar er is nog geen UI om users af te wijzen of te deactiveren.
 
 ## Vercel Deployment Configuratie
 
@@ -278,8 +321,25 @@ Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.1:
 ## Hoe verder te werken
 
 1. Clone het repo: `git clone https://github.com/WebNurse-ctrl/HandyMan.git`
-2. Checkout de branch: `git checkout claude/design-scalable-webapp-jwOIR`
+2. Checkout de actieve branch: `git checkout claude/fix-admin-panel-HyGll`
 3. Werk in `frontend/` - dat is de actieve app
 4. De `backend/` map bevat de originele NestJS code als referentie voor business logica
 5. Na wijzigingen: `git push` triggert automatisch een Vercel deployment
-6. Database schema wijzigen: update `frontend/prisma/schema.prisma`, dan lokaal `npx prisma db push`
+6. Database schema wijzigen: update `frontend/prisma/schema.prisma`, dan lokaal `npx prisma db push` (gebruikt `DIRECT_URL`)
+
+## Database — volledig rebuild script
+
+Het volledige rebuild-script staat in **[`docs/db-rebuild.sql`](docs/db-rebuild.sql)**.
+Gebruik dit alleen op een lege of corrupte DB — alle data gaat verloren.
+Uitvoeren via de **Supabase SQL Editor** (één paste, zelfstandig uitvoerbaar).
+
+Belangrijkste details:
+- `users.id` (en alle FK-kolommen die ernaar verwijzen) is **`TEXT`**, niet
+  `UUID`. Default-waarde komt van `gen_random_uuid()::text`. Als je ooit
+  een losse migratie schrijft: gebruik `TEXT` voor FKs die naar een Prisma-
+  `String @id` kolom wijzen.
+- `ON DELETE CASCADE` staat gezet op alle polymorfe relaties (comments,
+  attachments, notifications, task_logs, purchase_approvals).
+- Johan Beckers wordt automatisch aangemaakt bij zijn eerste login na de
+  rebuild (callback herkent hem). Geen handmatige seed nodig.
+- Houd `schema.prisma` en `docs/db-rebuild.sql` in sync bij schema-wijzigingen.
