@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.0
+# HandyMan - Project Handover Document v1.2
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -13,7 +13,7 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Microsoft Entra ID (Azure AD) SSO
 - **Repo**: github.com/WebNurse-ctrl/HandyMan
-- **Branch**: `claude/design-scalable-webapp-jwOIR`
+- **Branch**: `claude/fix-admin-panel-HyGll` (v1.2)
 
 ## Tech Stack
 
@@ -111,6 +111,7 @@ HandyMan/
 ### Enums
 
 - **UserRole**: MEDEWERKER, TECHNISCHE_DIENST, DIENSTHOOFD, FACILITAIR_MANAGER, ADMIN
+- **UserStatus**: PENDING, APPROVED, REJECTED (v1.2)
 - **WorkRequestStatus**: INGEDIEND, IN_BEHANDELING, GOEDGEKEURD, AFGEWERKT, GEWEIGERD
 - **Priority**: LAAG, NORMAAL, HOOG, URGENT
 - **TaskStatus**: OPEN, IN_UITVOERING, AFGEWERKT, ON_HOLD
@@ -139,6 +140,13 @@ Login knop → /api/auth/login → redirect naar Microsoft login
 - Bevat "diensthoofd"/"hoofd" → DIENSTHOOFD
 - Bevat "technisch"/"onderhoud" → TECHNISCHE_DIENST
 - Anders → MEDEWERKER
+- DisplayName "Johan Beckers" → ADMIN (automatisch goedgekeurd)
+
+**Goedkeuringsflow (v1.2)**: nieuwe gebruikers krijgen `status = PENDING` bij aanmelden.
+Zij zien `/pending` tot een admin hen goedkeurt via `/admin`. Admins krijgen een
+in-app notificatie (type `USER_APPROVAL_NEEDED`). Na goedkeuring krijgt de
+gebruiker een e-mail via Microsoft Graph `sendMail` (application permission
+`Mail.Send`, verzonden vanuit `AZURE_AD_MAIL_SENDER`) en `status = APPROVED`.
 
 ## Rollen & Rechten (RBAC)
 
@@ -171,7 +179,10 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/api/notifications` | GET | Lijst notificaties |
 | `/api/notifications/count` | GET | Ongelezen aantal |
 | `/api/notifications/read-all` | PATCH | Alles als gelezen markeren |
-| `/api/users` | GET | Gebruikerslijst met paginering |
+| `/api/users` | GET | Gebruikerslijst met paginering (admin-only) |
+| `/api/users/pending` | GET | Lijst aanmeldingen die wachten op goedkeuring (admin-only) |
+| `/api/users/[id]/role` | PATCH | Rol van gebruiker bijwerken (admin-only) |
+| `/api/users/[id]/approve` | POST | Aanmelding goedkeuren + e-mail (admin-only) |
 | `/api/users/technical-staff` | GET | Technisch personeel |
 | `/api/campuses` | GET | Alle campussen |
 | `/api/categories` | GET | Alle categorieën |
@@ -194,7 +205,8 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/tasks` | tasks/page.tsx | Tabel met toewijzing, deadline, status |
 | `/projects` | projects/page.tsx | Kaartweergave met budgetvoortgang |
 | `/purchases` | purchases/page.tsx | Tabel met bedrag, type, goedkeuringsstatus |
-| `/admin` | admin/page.tsx | Gebruikersbeheer met rol-dropdown |
+| `/admin` | admin/page.tsx | Admin-only. Tabs: "Nieuwe aanmeldingen" + "Alle gebruikers" met rol-dropdown |
+| `/pending` | pending/page.tsx | Landingspagina voor gebruikers die wachten op goedkeuring |
 
 ## UI Design Systeem
 
@@ -213,6 +225,26 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `AZURE_AD_CLIENT_ID` | App registration client ID |
 | `AZURE_AD_CLIENT_SECRET` | App registration secret |
 | `AZURE_AD_REDIRECT_URI` | `https://handyman-eta-mocha.vercel.app/api/auth/callback` |
+| `AZURE_AD_MAIL_SENDER` | (v1.2) UPN/mailbox van waaruit goedkeuringsmails verstuurd worden. Vereist `Mail.Send` application permission op de Azure AD app. Zonder deze variabele slaagt de goedkeuring nog steeds maar wordt er geen e-mail verstuurd. |
+
+## Wijzigingen in v1.2
+
+- **Gebruikers goedkeuringsflow**: nieuwe users worden `PENDING`, admin moet
+  goedkeuren (`/admin` → tab "Nieuwe aanmeldingen"). Pending users zien
+  `/pending` landingspagina.
+- **Johan Beckers** wordt automatisch herkend als `ADMIN` en `APPROVED` bij
+  login.
+- **Admin panel werkt**: nieuwe endpoints `PATCH /api/users/[id]/role`,
+  `POST /api/users/[id]/approve`, `GET /api/users/pending`. Admin endpoints
+  checken nu de rol via `requireAdmin()` (frontend `/api/users` GET is
+  admin-only geworden).
+- **E-mail via Microsoft Graph**: `sendMail` client-credentials flow in
+  `src/lib/email.ts`; nieuwe env var `AZURE_AD_MAIL_SENDER`.
+- **Sidebar "Beheer"** nu enkel zichtbaar voor `ADMIN` rol.
+- **Database schema wijziging**: voer `npx prisma db push` uit tegen
+  Supabase om de `users.status`, `users.approved_at`, `users.approved_by_id`
+  kolommen en de `UserStatus` enum + `USER_APPROVAL_NEEDED` /
+  `USER_APPROVED` notification types toe te voegen.
 
 ## Bekende Beperkingen in v1.0
 

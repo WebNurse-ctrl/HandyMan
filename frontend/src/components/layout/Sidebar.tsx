@@ -40,7 +40,7 @@ const navigation = [
     name: 'Beheer',
     href: '/admin',
     icon: AdminIcon,
-    roles: ['FACILITAIR_MANAGER', 'ADMIN'],
+    roles: ['ADMIN'],
   },
 ];
 

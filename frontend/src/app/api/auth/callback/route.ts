@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isAdminIdentity } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,25 +94,39 @@ export async function GET(request: NextRequest) {
 
   // Step 3: Create or update user in database
   try {
+    const email = profile.mail || profile.userPrincipalName;
+    const isJohan = isAdminIdentity(profile.displayName, email);
+
     let user = await prisma.user.findUnique({
       where: { azureAdId: profile.id },
     });
 
     if (user) {
+      // Promote Johan Beckers to ADMIN / APPROVED on every login in case his
+      // account predates this feature.
+      const promoteJohan = isJohan && (user.role !== 'ADMIN' || user.status !== 'APPROVED');
+
       user = await prisma.user.update({
         where: { id: user.id },
         data: {
-          email: profile.mail || profile.userPrincipalName,
+          email,
           displayName: profile.displayName,
           firstName: profile.givenName,
           lastName: profile.surname,
           department: profile.department,
           jobTitle: profile.jobTitle,
           lastLoginAt: new Date(),
+          ...(promoteJohan
+            ? {
+                role: 'ADMIN',
+                status: 'APPROVED',
+                approvedAt: user.approvedAt ?? new Date(),
+              }
+            : {}),
         },
       });
     } else {
-      let role: 'MEDEWERKER' | 'TECHNISCHE_DIENST' | 'DIENSTHOOFD' | 'FACILITAIR_MANAGER' = 'MEDEWERKER';
+      let role: 'MEDEWERKER' | 'TECHNISCHE_DIENST' | 'DIENSTHOOFD' | 'FACILITAIR_MANAGER' | 'ADMIN' = 'MEDEWERKER';
       const jobTitle = (profile.jobTitle || '').toLowerCase();
       if (jobTitle.includes('facilitair') || jobTitle.includes('facility')) {
         role = 'FACILITAIR_MANAGER';
@@ -121,19 +136,44 @@ export async function GET(request: NextRequest) {
         role = 'TECHNISCHE_DIENST';
       }
 
+      if (isJohan) role = 'ADMIN';
+
       user = await prisma.user.create({
         data: {
           azureAdId: profile.id,
-          email: profile.mail || profile.userPrincipalName,
+          email,
           displayName: profile.displayName,
           firstName: profile.givenName,
           lastName: profile.surname,
           department: profile.department,
           jobTitle: profile.jobTitle,
           role,
+          status: isJohan ? 'APPROVED' : 'PENDING',
+          approvedAt: isJohan ? new Date() : null,
           lastLoginAt: new Date(),
         },
       });
+
+      // Notify all administrators about the new pending signup.
+      if (!isJohan) {
+        const admins = await prisma.user.findMany({
+          where: { role: 'ADMIN', status: 'APPROVED' },
+          select: { id: true },
+        });
+
+        if (admins.length > 0) {
+          await prisma.notification.createMany({
+            data: admins.map((admin) => ({
+              userId: admin.id,
+              type: 'USER_APPROVAL_NEEDED' as const,
+              title: 'Nieuwe aanmelding wacht op goedkeuring',
+              message: `${user!.displayName} (${user!.email}) heeft zich aangemeld en wacht op goedkeuring.`,
+              entityType: 'user',
+              entityId: user!.id,
+            })),
+          });
+        }
+      }
     }
 
     const token = btoa(user.id);

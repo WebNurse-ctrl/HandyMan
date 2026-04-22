@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/auth-server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAdmin(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
@@ -32,6 +36,7 @@ export async function GET(request: NextRequest) {
           department: true,
           jobTitle: true,
           role: true,
+          status: true,
           avatarUrl: true,
           lastLoginAt: true,
         },

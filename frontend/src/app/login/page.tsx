@@ -20,7 +20,7 @@ const errorMessages: Record<string, string> = {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setAuth, isAuthenticated } = useAuth();
+  const { setAuth, isAuthenticated, user } = useAuth();
 
   const errorCode = searchParams.get('error');
   const errorDetail = searchParams.get('detail');
@@ -33,10 +33,10 @@ function LoginContent() {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => res.json())
-        .then((user) => {
-          if (user && user.id) {
-            setAuth(token, user);
-            router.push('/dashboard');
+        .then((u) => {
+          if (u && u.id) {
+            setAuth(token, u);
+            router.push(u.status === 'APPROVED' ? '/dashboard' : '/pending');
           }
         })
         .catch(() => {
@@ -47,9 +47,9 @@ function LoginContent() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/dashboard');
+      router.push(user?.status === 'APPROVED' ? '/dashboard' : '/pending');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, user, router]);
 
   const handleLogin = () => {
     window.location.href = '/api/auth/login';
