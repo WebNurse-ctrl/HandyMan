@@ -55,6 +55,23 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const token = request.headers.get('authorization')?.replace('Bearer ', '');
+    if (!token) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+
+    let userId: string;
+    try {
+      userId = atob(token);
+    } catch {
+      return NextResponse.json({ message: 'Invalid token' }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return NextResponse.json({ message: 'User not found' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { title, description, campusId, locationId, categoryId, priority } = body;
 
@@ -69,19 +86,6 @@ export async function POST(request: NextRequest) {
       },
     });
     const requestNumber = `WR-${year}-${String(count + 1).padStart(4, '0')}`;
-
-    // Get first user as fallback (in production, get from JWT)
-    let user = await prisma.user.findFirst();
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          azureAdId: 'system',
-          email: 'system@handyman.local',
-          displayName: 'Systeem',
-          role: 'ADMIN',
-        },
-      });
-    }
 
     const workRequest = await prisma.workRequest.create({
       data: {
