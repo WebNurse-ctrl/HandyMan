@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import AppLayout from '@/components/layout/AppLayout';
 import { apiGet, apiPost } from '@/lib/api';
@@ -10,6 +10,7 @@ import { Campus, Category } from '@/types';
 
 export default function NewWorkRequestPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -32,6 +33,8 @@ export default function NewWorkRequestPage() {
   const createMutation = useMutation({
     mutationFn: (data: any) => apiPost('/api/work-requests', data),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['work-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Werkaanvraag succesvol ingediend!');
       router.push('/work-requests');
     },

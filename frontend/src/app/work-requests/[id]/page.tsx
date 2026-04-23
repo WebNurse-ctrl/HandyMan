@@ -79,6 +79,7 @@ export default function WorkRequestDetailPage() {
     onSuccess: (updated) => {
       queryClient.setQueryData(['work-request', id], updated);
       queryClient.invalidateQueries({ queryKey: ['work-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Voortgang bijgewerkt');
     },
     onError: () => toast.error('Bijwerken mislukt'),
@@ -91,6 +92,7 @@ export default function WorkRequestDetailPage() {
       setCommentDraft('');
       queryClient.invalidateQueries({ queryKey: ['work-request-comments', id] });
       queryClient.invalidateQueries({ queryKey: ['work-request', id] });
+      queryClient.invalidateQueries({ queryKey: ['work-requests'] });
       toast.success('Feedback toegevoegd');
     },
     onError: () => toast.error('Feedback toevoegen mislukt'),
