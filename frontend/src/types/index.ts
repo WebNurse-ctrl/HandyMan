@@ -41,10 +41,20 @@ export interface WorkRequest {
   category?: { name: string };
   priority: Priority;
   status: WorkRequestStatus;
+  progress: number;
   rejectionReason?: string;
+  resolvedAt?: string;
   createdAt: string;
   updatedAt: string;
   _count?: { comments: number; attachments: number };
+}
+
+export interface Comment {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  user: { displayName: string; email: string; avatarUrl?: string };
 }
 
 // Task types

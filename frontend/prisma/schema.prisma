@@ -147,6 +147,7 @@ model WorkRequest {
   priority        Priority          @default(NORMAAL)
   suggestedPriority Priority?       @map("suggested_priority")
   status          WorkRequestStatus @default(INGEDIEND)
+  progress        Int               @default(0)
   rejectionReason String?           @map("rejection_reason")
   resolvedAt      DateTime?         @map("resolved_at")
   createdAt       DateTime          @default(now()) @map("created_at")
