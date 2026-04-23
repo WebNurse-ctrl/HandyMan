@@ -3,6 +3,34 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  try {
+    const building = await prisma.building.findUnique({
+      where: { id: params.id },
+      include: {
+        campus: { select: { id: true, name: true, code: true } },
+        departments: {
+          orderBy: { name: 'asc' },
+          include: {
+            rooms: { orderBy: [{ number: 'asc' }, { name: 'asc' }] },
+            _count: { select: { rooms: true } },
+          },
+        },
+      },
+    });
+    if (!building) {
+      return NextResponse.json({ message: 'Gebouw niet gevonden' }, { status: 404 });
+    }
+    return NextResponse.json(building);
+  } catch (error) {
+    console.error('Building detail GET error:', error);
+    return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } },

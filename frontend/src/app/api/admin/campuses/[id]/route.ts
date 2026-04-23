@@ -11,10 +11,23 @@ export async function GET(
     const campus = await prisma.campus.findUnique({
       where: { id: params.id },
       include: {
-        buildings: { orderBy: { name: 'asc' } },
-        departments: {
+        buildings: {
           orderBy: { name: 'asc' },
-          include: { rooms: { orderBy: [{ number: 'asc' }, { name: 'asc' }] } },
+          include: {
+            departments: {
+              orderBy: { name: 'asc' },
+              include: {
+                rooms: { orderBy: [{ number: 'asc' }, { name: 'asc' }] },
+              },
+            },
+          },
+        },
+        departments: {
+          where: { buildingId: null },
+          orderBy: { name: 'asc' },
+          include: {
+            rooms: { orderBy: [{ number: 'asc' }, { name: 'asc' }] },
+          },
         },
       },
     });

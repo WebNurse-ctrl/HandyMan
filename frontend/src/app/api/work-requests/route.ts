@@ -56,7 +56,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, campusId, locationId, categoryId, priority } = body;
+    const {
+      title,
+      description,
+      campusId,
+      buildingId,
+      departmentId,
+      roomId,
+      locationId,
+      categoryId,
+      priority,
+    } = body;
 
     // Generate request number
     const year = new Date().getFullYear();
@@ -90,6 +100,9 @@ export async function POST(request: NextRequest) {
         description,
         requestedById: user.id,
         campusId,
+        buildingId: buildingId || undefined,
+        departmentId: departmentId || undefined,
+        roomId: roomId || undefined,
         locationId: locationId || undefined,
         categoryId: categoryId || undefined,
         priority: priority || 'NORMAAL',

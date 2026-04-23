@@ -5,13 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
 
-interface Building {
-  id: string;
-  name: string;
-  code?: string | null;
-  description?: string | null;
-}
-
 interface Room {
   id: string;
   name?: string | null;
@@ -24,7 +17,16 @@ interface Department {
   name: string;
   code?: string | null;
   description?: string | null;
+  buildingId?: string | null;
   rooms: Room[];
+}
+
+interface Building {
+  id: string;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  departments: Department[];
 }
 
 interface CampusDetail {
@@ -165,9 +167,7 @@ export default function CampusesTab() {
         ) : detail ? (
           <CampusDetailPanel
             campus={detail}
-            onSave={(data) =>
-              updateCampus.mutate({ id: detail.id, data })
-            }
+            onSave={(data) => updateCampus.mutate({ id: detail.id, data })}
             onDelete={() => {
               if (
                 confirm(
@@ -287,6 +287,8 @@ function CampusDetailPanel({
 
   const [tab, setTab] = useState<'info' | 'buildings' | 'departments'>('info');
 
+  const directDeptCount = campus.departments.length;
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-gray-200 bg-white">
@@ -320,7 +322,7 @@ function CampusDetailPanel({
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Afdelingen ({campus.departments.length})
+              Afdelingen (direct) ({directDeptCount})
             </button>
           </nav>
         </div>
@@ -369,11 +371,7 @@ function CampusDetailPanel({
                 </div>
               </div>
               <div className="flex items-center justify-between pt-2">
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="btn-primary"
-                >
+                <button type="submit" disabled={isSaving} className="btn-primary">
                   {isSaving ? 'Bezig...' : 'Opslaan'}
                 </button>
                 <button
@@ -390,7 +388,14 @@ function CampusDetailPanel({
 
           {tab === 'buildings' && <BuildingsSection campus={campus} />}
 
-          {tab === 'departments' && <DepartmentsSection campus={campus} />}
+          {tab === 'departments' && (
+            <DepartmentsSection
+              campusId={campus.id}
+              departments={campus.departments}
+              scope="campus"
+              emptyText="Deze campus heeft nog geen afdelingen die rechtstreeks onder de campus vallen. Voeg er een toe als deze campus niet uit aparte gebouwen bestaat."
+            />
+          )}
         </div>
       </div>
     </div>
@@ -400,6 +405,7 @@ function CampusDetailPanel({
 function BuildingsSection({ campus }: { campus: CampusDetail }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ name: '', code: '', description: '' });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ['admin-campus', campus.id] });
@@ -460,44 +466,119 @@ function BuildingsSection({ campus }: { campus: CampusDetail }) {
       {campus.buildings.length === 0 ? (
         <p className="text-sm text-gray-500">Nog geen gebouwen gedefinieerd.</p>
       ) : (
-        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+        <div className="space-y-3">
           {campus.buildings.map((b) => (
-            <li
+            <BuildingRow
               key={b.id}
-              className="flex items-center justify-between px-4 py-3"
-            >
-              <div>
-                <p className="font-medium text-gray-900">{b.name}</p>
-                {b.code && <p className="text-xs text-gray-500">Code: {b.code}</p>}
-              </div>
-              <button
-                onClick={() => {
-                  if (confirm(`Gebouw "${b.name}" verwijderen?`)) {
-                    deleteBuilding.mutate(b.id);
-                  }
-                }}
-                className="text-sm font-medium text-danger-600 hover:text-danger-700"
-              >
-                Verwijder
-              </button>
-            </li>
+              building={b}
+              expanded={expandedId === b.id}
+              onToggle={() =>
+                setExpandedId(expandedId === b.id ? null : b.id)
+              }
+              onDelete={() => {
+                if (
+                  confirm(
+                    `Gebouw "${b.name}" verwijderen? Alle afdelingen en kamers in dit gebouw worden ook verwijderd.`,
+                  )
+                ) {
+                  deleteBuilding.mutate(b.id);
+                }
+              }}
+            />
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
 }
 
-function DepartmentsSection({ campus }: { campus: CampusDetail }) {
+function BuildingRow({
+  building,
+  expanded,
+  onToggle,
+  onDelete,
+}: {
+  building: Building;
+  expanded: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200">
+      <div className="flex items-center justify-between px-4 py-3">
+        <button
+          onClick={onToggle}
+          className="flex flex-1 items-center gap-2 text-left"
+        >
+          <svg
+            className={`h-4 w-4 text-gray-400 transition-transform ${
+              expanded ? 'rotate-90' : ''
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <div>
+            <p className="font-medium text-gray-900">{building.name}</p>
+            <p className="text-xs text-gray-500">
+              {building.code && <span className="mr-2">Code: {building.code}</span>}
+              {building.departments.length}{' '}
+              {building.departments.length === 1 ? 'afdeling' : 'afdelingen'}
+            </p>
+          </div>
+        </button>
+        <button
+          onClick={onDelete}
+          className="text-sm font-medium text-danger-600 hover:text-danger-700"
+        >
+          Verwijder
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-gray-100 bg-gray-50 px-4 py-4">
+          <DepartmentsSection
+            buildingId={building.id}
+            departments={building.departments}
+            scope="building"
+            emptyText="Nog geen afdelingen in dit gebouw."
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DepartmentsSection({
+  campusId,
+  buildingId,
+  departments,
+  scope,
+  emptyText,
+}: {
+  campusId?: string;
+  buildingId?: string;
+  departments: Department[];
+  scope: 'campus' | 'building';
+  emptyText: string;
+}) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ name: '', code: '' });
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['admin-campus', campus.id] });
+    queryClient.invalidateQueries({ queryKey: ['admin-campus'] });
 
   const createDept = useMutation({
-    mutationFn: (data: typeof form) =>
-      apiPost(`/api/admin/campuses/${campus.id}/departments`, data),
+    mutationFn: (data: typeof form) => {
+      const url =
+        scope === 'building'
+          ? `/api/admin/buildings/${buildingId}/departments`
+          : `/api/admin/campuses/${campusId}/departments`;
+      return apiPost(url, data);
+    },
     onSuccess: () => {
       invalidate();
       setForm({ name: '', code: '' });
@@ -548,11 +629,11 @@ function DepartmentsSection({ campus }: { campus: CampusDetail }) {
         </button>
       </form>
 
-      {campus.departments.length === 0 ? (
-        <p className="text-sm text-gray-500">Nog geen afdelingen gedefinieerd.</p>
+      {departments.length === 0 ? (
+        <p className="text-sm text-gray-500">{emptyText}</p>
       ) : (
         <div className="space-y-3">
-          {campus.departments.map((d) => (
+          {departments.map((d) => (
             <DepartmentRow
               key={d.id}
               department={d}
@@ -607,7 +688,7 @@ function DepartmentRow({
   });
 
   return (
-    <div className="rounded-lg border border-gray-200">
+    <div className="rounded-lg border border-gray-200 bg-white">
       <div className="flex items-center justify-between px-4 py-3">
         <button
           onClick={() => setExpanded(!expanded)}
