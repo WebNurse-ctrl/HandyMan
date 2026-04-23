@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "build:with-db-sync": "prisma db push --skip-generate && prisma generate && next build",
+    "db:push": "prisma db push",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate || true"
