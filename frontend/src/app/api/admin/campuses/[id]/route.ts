@@ -8,36 +8,43 @@ export async function GET(
   { params }: { params: { id: string } },
 ) {
   try {
-    const campus = await prisma.campus.findUnique({
+    const baseCampus = await prisma.campus.findUnique({
       where: { id: params.id },
-      include: {
-        buildings: {
-          orderBy: { name: 'asc' },
-          include: {
-            departments: {
-              orderBy: { name: 'asc' },
-              include: {
-                rooms: { orderBy: [{ number: 'asc' }, { name: 'asc' }] },
-              },
-            },
-          },
-        },
-        departments: {
-          where: { buildingId: null },
-          orderBy: { name: 'asc' },
-          include: {
-            rooms: { orderBy: [{ number: 'asc' }, { name: 'asc' }] },
-          },
-        },
-      },
     });
-    if (!campus) {
+    if (!baseCampus) {
       return NextResponse.json({ message: 'Campus niet gevonden' }, { status: 404 });
     }
-    return NextResponse.json(campus);
+
+    const buildings = await prisma.building.findMany({
+      where: { campusId: params.id },
+      orderBy: { name: 'asc' },
+    });
+
+    const allDepartments = await prisma.department.findMany({
+      where: { campusId: params.id },
+      orderBy: { name: 'asc' },
+      include: {
+        rooms: { orderBy: [{ number: 'asc' }, { name: 'asc' }] },
+      },
+    });
+
+    const buildingsWithDepartments = buildings.map((b) => ({
+      ...b,
+      departments: allDepartments.filter((d) => d.buildingId === b.id),
+    }));
+
+    const directDepartments = allDepartments.filter((d) => !d.buildingId);
+
+    return NextResponse.json({
+      ...baseCampus,
+      buildings: buildingsWithDepartments,
+      departments: directDepartments,
+    });
   } catch (error) {
     console.error('Admin campus detail GET error:', error);
-    return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ message }, { status: 500 });
   }
 }
 

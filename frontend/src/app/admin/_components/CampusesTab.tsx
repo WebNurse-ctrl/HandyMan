@@ -58,10 +58,15 @@ export default function CampusesTab() {
     queryFn: () => apiGet('/api/admin/campuses'),
   });
 
-  const { data: detail } = useQuery<CampusDetail>({
+  const {
+    data: detail,
+    isLoading: detailLoading,
+    error: detailError,
+  } = useQuery<CampusDetail>({
     queryKey: ['admin-campus', selectedId],
     queryFn: () => apiGet(`/api/admin/campuses/${selectedId}`),
     enabled: !!selectedId,
+    retry: false,
   });
 
   const createCampus = useMutation({
@@ -164,6 +169,12 @@ export default function CampusesTab() {
             onCancel={() => setShowNew(false)}
             isPending={createCampus.isPending}
           />
+        ) : selectedId && detailLoading ? (
+          <div className="flex h-64 items-center justify-center rounded-xl border border-gray-200 bg-white">
+            <p className="text-sm text-gray-500">Laden...</p>
+          </div>
+        ) : selectedId && detailError ? (
+          <DetailErrorPanel error={detailError} />
         ) : detail ? (
           <CampusDetailPanel
             campus={detail}
@@ -187,6 +198,38 @@ export default function CampusesTab() {
             </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function DetailErrorPanel({ error }: { error: unknown }) {
+  const err = error as {
+    response?: { status?: number; data?: { message?: string } };
+    message?: string;
+  };
+  const status = err.response?.status;
+  const message =
+    err.response?.data?.message || err.message || 'Onbekende fout';
+
+  return (
+    <div className="space-y-3 rounded-xl border border-danger-200 bg-danger-50 p-6">
+      <h3 className="text-base font-semibold text-danger-800">
+        Kon campusdetails niet laden
+      </h3>
+      <p className="text-sm text-danger-700">
+        {status ? `HTTP ${status}: ` : ''}
+        {message}
+      </p>
+      <div className="rounded-lg bg-white p-3 text-xs text-gray-700">
+        <p className="mb-1 font-semibold">Meest voorkomende oorzaak</p>
+        <p>
+          De database is niet bijgewerkt voor de nieuwste schema-wijzigingen
+          (kolom <code className="font-mono">building_id</code> op{' '}
+          <code className="font-mono">departments</code>, of de locatie-kolommen
+          op <code className="font-mono">work_requests</code>). Voer de SQL uit
+          die in de handover-notities staat en herlaad deze pagina.
+        </p>
       </div>
     </div>
   );
