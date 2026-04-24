@@ -395,6 +395,38 @@ export default function WorkRequestDetailPage() {
                     {workRequest.campus?.name ?? '—'}
                   </dd>
                 </div>
+                {workRequest.building && (
+                  <div>
+                    <dt className="text-xs font-medium uppercase text-gray-500">
+                      Gebouw
+                    </dt>
+                    <dd className="mt-0.5 text-gray-900">
+                      {workRequest.building.name}
+                    </dd>
+                  </div>
+                )}
+                {workRequest.department && (
+                  <div>
+                    <dt className="text-xs font-medium uppercase text-gray-500">
+                      Afdeling
+                    </dt>
+                    <dd className="mt-0.5 text-gray-900">
+                      {workRequest.department.name}
+                    </dd>
+                  </div>
+                )}
+                {workRequest.room && (
+                  <div>
+                    <dt className="text-xs font-medium uppercase text-gray-500">
+                      Kamer
+                    </dt>
+                    <dd className="mt-0.5 text-gray-900">
+                      {[workRequest.room.name, workRequest.room.number]
+                        .filter(Boolean)
+                        .join(' · ') || '—'}
+                    </dd>
+                  </div>
+                )}
                 {workRequest.location && (
                   <div>
                     <dt className="text-xs font-medium uppercase text-gray-500">
@@ -410,8 +442,15 @@ export default function WorkRequestDetailPage() {
                     <dt className="text-xs font-medium uppercase text-gray-500">
                       Categorie
                     </dt>
-                    <dd className="mt-0.5 text-gray-900">
-                      {workRequest.category.name}
+                    <dd className="mt-0.5 flex items-center gap-2 text-gray-900">
+                      {workRequest.category.color && (
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: workRequest.category.color }}
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span>{workRequest.category.name}</span>
                     </dd>
                   </div>
                 )}

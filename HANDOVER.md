@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.4
+# HandyMan - Project Handover Document v1.4.1
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -13,9 +13,10 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Microsoft Entra ID (Azure AD) SSO
 - **Repo**: github.com/WebNurse-ctrl/HandyMan
-- **Actieve hoofdbranch**: `main` — bevat v1.0 → v1.4 (incl. v1.3 admin beheer + v1.4 detailpagina)
+- **Actieve hoofdbranch**: `main` — bevat v1.0 → v1.4.1 (incl. v1.3 admin beheer + v1.4 detailpagina + v1.4.1 locatie/categorie in detailkaart)
 - **v1.3 feature branch**: `claude/admin-campus-management-U7E1t` (gemerged in main)
 - **v1.4 feature branch**: `claude/job-request-details-ZBKGT` (gemerged in main)
+- **v1.4.1 feature branch**: `claude/add-location-category-details-68Ldu`
 
 ## Tech Stack
 
@@ -188,7 +189,7 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/api/auth/callback` | GET | Verwerkt Microsoft callback |
 | `/api/auth/me` | GET | Huidige user ophalen |
 | `/api/work-requests` | GET, POST | Lijst + aanmaken. v1.3 accepteert `buildingId`, `departmentId`, `roomId`. **v1.4**: POST registreert de aanvraag onder de aangemelde gebruiker (decodeert Bearer token → user) i.p.v. `findFirst()`. |
-| `/api/work-requests/[id]` | **GET, PATCH** | **v1.4** Detail ophalen en bijwerken (progress/status/priority/rejectionReason). Bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`. |
+| `/api/work-requests/[id]` | **GET, PATCH** | **v1.4** Detail ophalen en bijwerken (progress/status/priority/rejectionReason). Bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`. **v1.4.1**: GET/PATCH includen nu ook `building`, `department` en `room` (naast `campus`, `location`, `category`) zodat de detailpagina de volledige locatiehiërarchie kan tonen. |
 | `/api/work-requests/[id]/comments` | **GET, POST** | **v1.4** Feedback-thread voor een werkaanvraag. POST plaatst een comment onder de aangemelde gebruiker. |
 | `/api/tasks` | GET, POST | Taken |
 | `/api/projects` | GET, POST | Projecten |
@@ -233,7 +234,7 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/dashboard` | dashboard/page.tsx | KPI kaarten, trends, werklast, budgetten |
 | `/work-requests` | work-requests/page.tsx | Tabel met filters |
 | `/work-requests/new` | work-requests/new/page.tsx | **v1.3** Formulier met cascading locatie selects: Campus → (Gebouw) → Afdeling → Kamer |
-| `/work-requests/[id]` | work-requests/[id]/page.tsx | **v1.4** Detailpagina: meta (aanvrager, campus/gebouw/afd./kamer, categorie, timestamps), voortgangsslider 0/20/40/60/80/100 % met auto-statusovergang, feedback-thread (Comments). Slider disabled voor MEDEWERKER. |
+| `/work-requests/[id]` | work-requests/[id]/page.tsx | **v1.4** Detailpagina: meta (aanvrager, campus/gebouw/afd./kamer, categorie, timestamps), voortgangsslider 0/20/40/60/80/100 % met auto-statusovergang, feedback-thread (Comments). Slider disabled voor MEDEWERKER. **v1.4.1**: Details-kaart toont nu expliciet aparte regels voor `Gebouw`, `Afdeling` en `Kamer` (waar van toepassing) naast campus, plus de categorie met kleurstip. |
 | `/tasks` | tasks/page.tsx | Takenlijst |
 | `/projects` | projects/page.tsx | Projectkaarten |
 | `/purchases` | purchases/page.tsx | Aankopentabel |
@@ -280,7 +281,7 @@ Route: `/work-requests/[id]` — opgebouwd uit drie kaarten:
    - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
 3. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
 
-Bijkomende side-panel met metadata (aanvrager, campus, locatiehiërarchie, categorie, timestamps, `resolvedAt`).
+Bijkomende side-panel met metadata (aanvrager, campus, locatiehiërarchie, categorie, timestamps, `resolvedAt`). Sinds **v1.4.1** toont deze Details-kaart expliciet aparte regels voor `Campus`, `Gebouw`, `Afdeling`, `Kamer` (alleen indien ingevuld) plus `Categorie` (met kleur-stip wanneer de categorie een `color` heeft).
 
 ### Cache-gedrag (v1.4)
 
@@ -437,6 +438,12 @@ END $$;
 ```
 
 Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elke deploy automatisch gesynchroniseerd. `prisma db push` zonder `--accept-data-loss` faalt bij destructieve wijzigingen (bewust) zodat je stille dataverlies voorkomt. Zorg dat `DIRECT_URL` in Vercel gedefinieerd is, want `prisma db push` vereist een directe connectie (poort 5432, niet de PgBouncer-pooler op 6543).
+
+## Wat is geïmplementeerd in v1.4.1
+
+- **Locatiehiërarchie + categorie zichtbaar op werkaanvraag detailpagina**: de Details-kaart op `/work-requests/[id]` toont nu naast Campus ook expliciet de aparte regels `Gebouw`, `Afdeling` en `Kamer` (alleen getoond als ze ingevuld zijn), zodat de aanvrager direct ziet waar de aanvraag aan toebehoort. De `Categorie` wordt getoond inclusief de kleur-stip uit de categorie-instellingen.
+- **API `/api/work-requests/[id]` GET + PATCH**: de `include` is uitgebreid met `building`, `department` en `room` (met relevante velden zoals `name`, `code`, `number`). De oude legacy `location` blijft beschikbaar voor backward compatibility.
+- **TypeScript type `WorkRequest`**: uitgebreid met optionele `building`, `department` en `room` velden, en extra velden op `campus` (`code`) en `category` (`icon`, `color`).
 
 ## Wat is geïmplementeerd in v1.4
 
