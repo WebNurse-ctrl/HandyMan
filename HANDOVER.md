@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.3
+# HandyMan - Project Handover Document v1.4
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -13,8 +13,9 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Microsoft Entra ID (Azure AD) SSO
 - **Repo**: github.com/WebNurse-ctrl/HandyMan
-- **Hoofdbranch v1.0 (basis)**: `claude/design-scalable-webapp-jwOIR`
-- **Actieve v1.3 branch**: `claude/admin-campus-management-U7E1t`
+- **Actieve hoofdbranch**: `main` — bevat v1.0 → v1.4 (incl. v1.3 admin beheer + v1.4 detailpagina)
+- **v1.3 feature branch**: `claude/admin-campus-management-U7E1t` (gemerged in main)
+- **v1.4 feature branch**: `claude/job-request-details-ZBKGT` (gemerged in main)
 
 ## Tech Stack
 
@@ -63,7 +64,9 @@ HandyMan/
 │   │   │   │   ├── rooms/      # v1.3 - publiek GET (cascade select)
 │   │   │   │   ├── tasks/
 │   │   │   │   ├── users/      # list, [id] DELETE, [id]/role PATCH, technical-staff
-│   │   │   │   └── work-requests/
+│   │   │   │   └── work-requests/  # /route.ts lijst+create,
+│   │   │   │                       # [id]/route.ts v1.4 GET/PATCH (progress),
+│   │   │   │                       # [id]/comments/route.ts v1.4 GET/POST
 │   │   │   ├── admin/          # v1.3 - tabs: Gebruikers, Campussen, Categorieën, Instellingen
 │   │   │   │   └── _components/# UsersTab, CampusesTab, CategoriesTab, SettingsTab
 │   │   │   ├── dashboard/
@@ -71,7 +74,8 @@ HandyMan/
 │   │   │   ├── projects/
 │   │   │   ├── purchases/
 │   │   │   ├── tasks/
-│   │   │   ├── work-requests/  # + /new met cascading locatie selects
+│   │   │   ├── work-requests/  # /page.tsx lijst, /new cascading selects,
+│   │   │   │                   # [id]/page.tsx v1.4 detail+progress+feedback
 │   │   │   ├── layout.tsx
 │   │   │   ├── page.tsx
 │   │   │   └── providers.tsx
@@ -103,14 +107,14 @@ HandyMan/
 | **`rooms`** | **v1.3** Kamers/ruimtes per afdeling (name en/of number). Cascade delete vanuit afdeling. |
 | `locations` | Legacy v1.0 locaties. Nog steeds gekoppeld aan work_requests via locationId. |
 | `categories` | Categorieën met hiërarchie (parentId) en kleurlabel (HEX in `color`). |
-| `work_requests` | Werkaanvragen. v1.3: extra kolommen `building_id`, `department_id`, `room_id` (allen nullable). |
+| `work_requests` | Werkaanvragen. v1.3: extra kolommen `building_id`, `department_id`, `room_id` (allen nullable). **v1.4**: extra kolom `progress INTEGER NOT NULL DEFAULT 0` (0–100, stappen van 20). |
 | `request_bundles` | Groepering van gerelateerde werkaanvragen |
 | `tasks` | Taken met taskNumber, toewijzing, deadline, project-koppeling |
 | `task_logs` | Werkregistratie per taak (beschrijving, uren) |
 | `projects` | Projecten met budget, voortgang |
 | `purchase_requests` | Aankopen met goedkeuringsflow, type KLEIN/GROOT |
 | `purchase_approvals` | Goedkeuringsregistratie per aankoop |
-| `comments` | Polymorf: gekoppeld aan work_request, task, of project |
+| `comments` | Polymorf: gekoppeld aan work_request, task, of project. **v1.4**: gebruikt door de feedback-thread op de werkaanvraag detailpagina. |
 | `attachments` | Bestanden gekoppeld aan entiteiten |
 | `notifications` | In-app notificaties per gebruiker |
 | `system_config` | Key-value systeeminstellingen (beheerd via /admin Instellingen) |
@@ -183,7 +187,9 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/api/auth/login` | GET | Redirect naar Microsoft OAuth |
 | `/api/auth/callback` | GET | Verwerkt Microsoft callback |
 | `/api/auth/me` | GET | Huidige user ophalen |
-| `/api/work-requests` | GET, POST | Lijst + aanmaken (v1.3 accepteert buildingId, departmentId, roomId) |
+| `/api/work-requests` | GET, POST | Lijst + aanmaken. v1.3 accepteert `buildingId`, `departmentId`, `roomId`. **v1.4**: POST registreert de aanvraag onder de aangemelde gebruiker (decodeert Bearer token → user) i.p.v. `findFirst()`. |
+| `/api/work-requests/[id]` | **GET, PATCH** | **v1.4** Detail ophalen en bijwerken (progress/status/priority/rejectionReason). Bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`. |
+| `/api/work-requests/[id]/comments` | **GET, POST** | **v1.4** Feedback-thread voor een werkaanvraag. POST plaatst een comment onder de aangemelde gebruiker. |
 | `/api/tasks` | GET, POST | Taken |
 | `/api/projects` | GET, POST | Projecten |
 | `/api/purchases` | GET, POST | Aankopen |
@@ -227,6 +233,7 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/dashboard` | dashboard/page.tsx | KPI kaarten, trends, werklast, budgetten |
 | `/work-requests` | work-requests/page.tsx | Tabel met filters |
 | `/work-requests/new` | work-requests/new/page.tsx | **v1.3** Formulier met cascading locatie selects: Campus → (Gebouw) → Afdeling → Kamer |
+| `/work-requests/[id]` | work-requests/[id]/page.tsx | **v1.4** Detailpagina: meta (aanvrager, campus/gebouw/afd./kamer, categorie, timestamps), voortgangsslider 0/20/40/60/80/100 % met auto-statusovergang, feedback-thread (Comments). Slider disabled voor MEDEWERKER. |
 | `/tasks` | tasks/page.tsx | Takenlijst |
 | `/projects` | projects/page.tsx | Projectkaarten |
 | `/purchases` | purchases/page.tsx | Aankopentabel |
@@ -260,6 +267,31 @@ Cascading selects in `/work-requests/new`:
 
 De waardes worden verstuurd als `buildingId`, `departmentId`, `roomId` naar `/api/work-requests` POST.
 
+### Werkaanvraag detailpagina (v1.4)
+
+Route: `/work-requests/[id]` — opgebouwd uit drie kaarten:
+
+1. **Omschrijving** met optioneel een weigeringsreden.
+2. **Werkvooruitgang**:
+   - Range-input `min=0 max=100 step=20` — de slider rast vast op de stappen 0, 20, 40, 60, 80, 100.
+   - Klikbare stap-knoppen onder de balk voor directe selectie.
+   - Kleur van de balk: grijs (0) → oranje (≥20) → blauw (≥60) → groen (=100).
+   - Rol-gating: alleen niet-MEDEWERKER rollen kunnen de waarde bijwerken. De server verifieert geen rol (conform de huidige RBAC-status) — gating is enkel UI-niveau.
+   - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
+3. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
+
+Bijkomende side-panel met metadata (aanvrager, campus, locatiehiërarchie, categorie, timestamps, `resolvedAt`).
+
+### Cache-gedrag (v1.4)
+
+`providers.tsx` is afgesteld voor altijd-verse data:
+
+- `staleTime: 0`
+- `refetchOnMount: 'always'`
+- `refetchOnWindowFocus: true`
+
+Mutaties invalideren expliciet `['work-requests']`, `['dashboard']`, `['work-request', id]` en `['work-request-comments', id]` zodat lijst, KPI-kaarten en comment-badges direct verversen zonder handmatige pagina-refresh.
+
 ## UI Design Systeem
 
 - **Kleuren**: primary (blauw), accent (oranje), success (groen), warning (oranje), danger (rood)
@@ -278,9 +310,20 @@ De waardes worden verstuurd als `buildingId`, `departmentId`, `roomId` naar `/ap
 | `AZURE_AD_CLIENT_SECRET` | App registration secret |
 | `AZURE_AD_REDIRECT_URI` | `https://handyman-eta-mocha.vercel.app/api/auth/callback` |
 
-## Database Migraties (v1.3)
+## Database Migraties
 
-De v1.3 schema-wijzigingen vereisen SQL op Supabase. `npx prisma db push` werkt ook, maar de SQL is ter referentie:
+Het meest pragmatische commando na een pull van `main`:
+
+```bash
+cd frontend
+npx prisma db push
+```
+
+Dit synchroniseert de complete v1.3 + v1.4 schema in één keer. Hieronder de SQL ter referentie, gesplitst per versie.
+
+### v1.3 schema
+
+Nieuwe tabellen `buildings`, `departments`, `rooms` + locatie-FK's op `work_requests`:
 
 ```sql
 -- v1.3 stap 1: nieuwe tabellen buildings, departments, rooms
@@ -365,6 +408,47 @@ ALTER TABLE "work_requests"
     ON DELETE SET NULL ON UPDATE CASCADE;
 ```
 
+### v1.4 schema
+
+Voeg de `progress` kolom toe. Dit SQL-script staat ook als los bestand in `frontend/prisma/migrations/2026_04_23_add_work_request_progress.sql`:
+
+```sql
+ALTER TABLE work_requests
+  ADD COLUMN IF NOT EXISTS progress INTEGER NOT NULL DEFAULT 0;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'work_requests_progress_range'
+  ) THEN
+    ALTER TABLE work_requests
+      ADD CONSTRAINT work_requests_progress_range
+      CHECK (progress BETWEEN 0 AND 100);
+  END IF;
+END $$;
+```
+
+### Optioneel: automatische push in Vercel build
+
+`frontend/package.json` biedt een opt-in script `build:with-db-sync`:
+
+```json
+"build:with-db-sync": "prisma db push --skip-generate && prisma generate && next build"
+```
+
+Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elke deploy automatisch gesynchroniseerd. `prisma db push` zonder `--accept-data-loss` faalt bij destructieve wijzigingen (bewust) zodat je stille dataverlies voorkomt. Zorg dat `DIRECT_URL` in Vercel gedefinieerd is, want `prisma db push` vereist een directe connectie (poort 5432, niet de PgBouncer-pooler op 6543).
+
+## Wat is geïmplementeerd in v1.4
+
+- **Werkaanvraag detailpagina** `/work-requests/[id]` met:
+  - Metadata (aanvrager, campus/gebouw/afdeling/kamer, categorie, timestamps).
+  - Voortgangsslider met vaste stappen van 20 % (0/20/40/60/80/100).
+  - Automatische statusovergang bij `progress=100` → `AFGEWERKT` + `resolvedAt`; bij `progress>0` op `INGEDIEND` → `IN_BEHANDELING`.
+  - Feedback-thread die bouwt op de bestaande `comments` tabel.
+- **`progress` kolom** op `work_requests` (Int, 0–100, default 0, DB-niveau CHECK constraint).
+- **POST `/api/work-requests` fix**: aanvragen worden nu geregistreerd onder de aangemelde gebruiker (via Bearer token → user lookup). Voorheen viel hij terug op `prisma.user.findFirst()` wat willekeurig een gebruiker koos.
+- **Live-UI updates**: `staleTime: 0` + `refetchOnMount: 'always'` + expliciete cache-invalidatie op alle mutaties, zodat toevoegingen en wijzigingen direct zichtbaar zijn zonder pagina-refresh. Ook veranderingen die buiten de app plaatsvinden (Supabase, andere tab) worden bij window-focus opgepikt.
+
 ## Wat is geïmplementeerd in v1.3
 
 - Campusbeheer: aanmaken/bewerken/verwijderen van campussen met adres en stad
@@ -379,22 +463,22 @@ ALTER TABLE "work_requests"
 
 ## Bekende Beperkingen
 
-Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.4+:
+Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.5+:
 
-1. **RBAC enforcement op API routes**: de Next.js API routes controleren momenteel niet de gebruikersrol
-2. **Foto upload**: het werkaanvraag formulier toont een upload area, maar de daadwerkelijke file upload is nog niet geïmplementeerd
-3. **Detail pagina's**: er zijn geen `/work-requests/[id]`, `/tasks/[id]`, `/projects/[id]` detail pagina's
-4. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI
-5. **Commentaar systeem**: de comments tabel bestaat maar er is geen UI om comments toe te voegen
-6. **E-mail notificaties**: alleen in-app notificaties, geen Microsoft Graph email integratie
-7. **Taak werkregistratie**: er is geen UI voor het logboek/werkregistratie bij taken
-8. **Zoekfunctie**: de globale zoekbalk in de navbar is niet functioneel
-9. **Mobile sidebar**: de hamburger menu toggle werkt niet op mobile
-10. **Token security**: het token is een simpele base64 van de user ID - niet cryptografisch veilig
-11. **Seed data**: de database is leeg bij eerste deploy - gebruik /admin om campussen/categorieën aan te maken
-12. **Goedkeuringsflow UI**: aankoop goedkeuren/afwijzen knoppen ontbreken in de UI
-13. **Budget alerts**: budget overschrijding notificaties niet geïmplementeerd
-14. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt niet op Vercel serverless
+1. **RBAC enforcement op API routes**: de Next.js API routes controleren momenteel niet de gebruikersrol. De werkaanvraag detailpagina gating is UI-only; de PATCH endpoint accepteert een voortgangs-update van elke geldige token.
+2. **Foto upload**: het werkaanvraag formulier toont een upload area, maar de daadwerkelijke file upload is nog niet geïmplementeerd.
+3. **Taak- en projectdetail**: `/tasks/[id]` en `/projects/[id]` ontbreken nog (alleen `/work-requests/[id]` bestaat vanaf v1.4).
+4. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI.
+5. **Comments op taken/projecten**: de `comments` tabel is polymorf, maar UI-integratie bestaat momenteel alleen voor werkaanvragen (v1.4).
+6. **E-mail notificaties**: alleen in-app notificaties, geen Microsoft Graph email integratie.
+7. **Taak werkregistratie**: er is geen UI voor het logboek/werkregistratie bij taken.
+8. **Zoekfunctie**: de globale zoekbalk in de navbar is niet functioneel.
+9. **Mobile sidebar**: de hamburger menu toggle werkt niet op mobile.
+10. **Token security**: het token is een simpele base64 van de user ID - niet cryptografisch veilig.
+11. **Seed data**: de database is leeg bij eerste deploy - gebruik /admin om campussen/categorieën aan te maken.
+12. **Goedkeuringsflow UI**: aankoop goedkeuren/afwijzen knoppen ontbreken in de UI.
+13. **Budget alerts**: budget overschrijding notificaties niet geïmplementeerd.
+14. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt niet op Vercel serverless.
 15. **Legacy Location tabel**: naast de nieuwe Building/Department/Room hiërarchie bestaat nog de oude `locations` tabel die via `WorkRequest.locationId` gekoppeld is. Voor nieuwe aanvragen wordt alleen nog de nieuwe hiërarchie gebruikt; de oude data blijft bestaan voor backward compatibility.
 
 ## Vercel Deployment Configuratie
@@ -410,8 +494,9 @@ Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.4+:
 ## Hoe verder te werken
 
 1. Clone het repo: `git clone https://github.com/WebNurse-ctrl/HandyMan.git`
-2. Checkout de actieve branch: `git checkout claude/admin-campus-management-U7E1t`
-3. Werk in `frontend/` - dat is de actieve app
-4. Na schema-wijzigingen: update `frontend/prisma/schema.prisma`, draai `npx prisma db push` tegen de Supabase DB (of schrijf equivalente SQL voor de SQL Editor)
-5. `git push` triggert automatisch een Vercel deployment
-6. De `backend/` map bevat de originele NestJS code als referentie
+2. Checkout de hoofdbranch: `git checkout main`
+3. Werk in `frontend/` — dat is de actieve app.
+4. Na schema-wijzigingen: update `frontend/prisma/schema.prisma`, draai `npx prisma db push` tegen de Supabase DB (of schrijf equivalente SQL voor de SQL Editor). Alternatief: zet Vercel's Build Command op `npm run build:with-db-sync` zodat elke deploy het schema automatisch synchroniseert.
+5. Voor een nieuwe feature: maak een feature branch vanaf `main` (bijv. `feature/task-detail-page`) en merge terug in `main` als die klaar is.
+6. `git push` triggert automatisch een Vercel deployment.
+7. De `backend/` map bevat de originele NestJS code als referentie; deze draait niet op Vercel.
