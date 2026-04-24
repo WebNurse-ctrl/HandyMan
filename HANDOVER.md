@@ -270,18 +270,22 @@ De waardes worden verstuurd als `buildingId`, `departmentId`, `roomId` naar `/ap
 
 ### Werkaanvraag detailpagina (v1.4)
 
-Route: `/work-requests/[id]` — opgebouwd uit drie kaarten:
+Route: `/work-requests/[id]` — opgebouwd uit een hoofdkolom en een side-panel.
+
+**Hoofdkolom (links)**:
 
 1. **Omschrijving** met optioneel een weigeringsreden.
-2. **Werkvooruitgang**:
+2. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
+
+**Side-panel (rechts)**:
+
+1. **Details**: metadata (aanvrager, `Campus`, `Gebouw`, `Afdeling`, `Kamer` — alleen indien ingevuld — plus `Categorie` met kleur-stip wanneer de categorie een `color` heeft, `Laatst bijgewerkt`, `Afgewerkt op`).
+2. **Werkvooruitgang** (sinds **v1.4.1** verplaatst van de hoofdkolom naar het side-panel, onder Details):
    - Range-input `min=0 max=100 step=20` — de slider rast vast op de stappen 0, 20, 40, 60, 80, 100.
    - Klikbare stap-knoppen onder de balk voor directe selectie.
    - Kleur van de balk: grijs (0) → oranje (≥20) → blauw (≥60) → groen (=100).
    - Rol-gating: alleen niet-MEDEWERKER rollen kunnen de waarde bijwerken. De server verifieert geen rol (conform de huidige RBAC-status) — gating is enkel UI-niveau.
    - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
-3. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
-
-Bijkomende side-panel met metadata (aanvrager, campus, locatiehiërarchie, categorie, timestamps, `resolvedAt`). Sinds **v1.4.1** toont deze Details-kaart expliciet aparte regels voor `Campus`, `Gebouw`, `Afdeling`, `Kamer` (alleen indien ingevuld) plus `Categorie` (met kleur-stip wanneer de categorie een `color` heeft).
 
 ### Cache-gedrag (v1.4)
 
@@ -444,6 +448,7 @@ Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elk
 - **Locatiehiërarchie + categorie zichtbaar op werkaanvraag detailpagina**: de Details-kaart op `/work-requests/[id]` toont nu naast Campus ook expliciet de aparte regels `Gebouw`, `Afdeling` en `Kamer` (alleen getoond als ze ingevuld zijn), zodat de aanvrager direct ziet waar de aanvraag aan toebehoort. De `Categorie` wordt getoond inclusief de kleur-stip uit de categorie-instellingen.
 - **API `/api/work-requests/[id]` GET + PATCH**: de `include` is uitgebreid met `building`, `department` en `room` (met relevante velden zoals `name`, `code`, `number`). De oude legacy `location` blijft beschikbaar voor backward compatibility.
 - **TypeScript type `WorkRequest`**: uitgebreid met optionele `building`, `department` en `room` velden, en extra velden op `campus` (`code`) en `category` (`icon`, `color`).
+- **Layout-wijziging detailpagina**: de kaart `Werkvooruitgang` is verplaatst van de hoofdkolom (links) naar het side-panel (rechts), direct onder de Details-kaart. Dit voorkomt dubbele voortgangsindicatoren en groepeert alle status/metadata-informatie aan de rechterkant.
 
 ## Wat is geïmplementeerd in v1.4
 
