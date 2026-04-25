@@ -7,9 +7,9 @@ import toast from 'react-hot-toast';
 import AppLayout from '@/components/layout/AppLayout';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityIndicator from '@/components/ui/PriorityIndicator';
-import { apiGet, apiPatch, apiPost } from '@/lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
-import { Comment, WorkRequest } from '@/types';
+import { Comment, TimeEntry, WorkRequest } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 
 const PROGRESS_STEPS = [0, 20, 40, 60, 80, 100] as const;
@@ -35,6 +35,23 @@ function initials(name?: string): string {
     .slice(0, 2)
     .map((n) => n[0]?.toUpperCase() ?? '')
     .join('');
+}
+
+function formatDuration(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes <= 0) return '0m';
+  const total = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(total / 60);
+  const mins = total % 60;
+  if (hours === 0) return `${mins}m`;
+  if (mins === 0) return `${hours}u`;
+  return `${hours}u ${mins}m`;
+}
+
+function liveDurationMinutes(startedAt: string): number {
+  return Math.max(
+    0,
+    Math.round((Date.now() - new Date(startedAt).getTime()) / 60000),
+  );
 }
 
 export default function WorkRequestDetailPage() {
@@ -66,8 +83,18 @@ export default function WorkRequestDetailPage() {
     enabled: !!id && !!workRequest,
   });
 
+  const { data: timeEntriesData, isLoading: timeEntriesLoading } = useQuery<{
+    data: TimeEntry[];
+    totalMinutes: number;
+  }>({
+    queryKey: ['work-request-time-entries', id],
+    queryFn: () => apiGet(`/api/work-requests/${id}/time-entries`),
+    enabled: !!id && !!workRequest,
+  });
+
   const [progressDraft, setProgressDraft] = useState<number>(0);
   const [commentDraft, setCommentDraft] = useState('');
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (workRequest) setProgressDraft(workRequest.progress ?? 0);
@@ -98,10 +125,76 @@ export default function WorkRequestDetailPage() {
     onError: () => toast.error('Feedback toevoegen mislukt'),
   });
 
+  const startTimerMutation = useMutation({
+    mutationFn: () =>
+      apiPost<TimeEntry>(`/api/work-requests/${id}/time-entries`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['work-request-time-entries', id],
+      });
+      toast.success('Tijdsregistratie gestart');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err?.response?.data?.message ?? 'Starten mislukt'),
+  });
+
+  const stopTimerMutation = useMutation({
+    mutationFn: (entryId: string) =>
+      apiPatch<TimeEntry>(
+        `/api/work-requests/${id}/time-entries/${entryId}`,
+        { stop: true },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['work-request-time-entries', id],
+      });
+      toast.success('Tijdsregistratie gestopt');
+    },
+    onError: () => toast.error('Stoppen mislukt'),
+  });
+
+  const deleteEntryMutation = useMutation({
+    mutationFn: (entryId: string) =>
+      apiDelete<{ success: boolean }>(
+        `/api/work-requests/${id}/time-entries/${entryId}`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['work-request-time-entries', id],
+      });
+      toast.success('Tijdsregistratie verwijderd');
+    },
+    onError: () => toast.error('Verwijderen mislukt'),
+  });
+
   const progressDirty = useMemo(
     () => workRequest && workRequest.progress !== progressDraft,
     [workRequest, progressDraft],
   );
+
+  const timeEntries = timeEntriesData?.data ?? [];
+  const runningEntry = timeEntries.find((entry) => !entry.endedAt);
+
+  useEffect(() => {
+    if (!runningEntry) return;
+    const interval = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, [runningEntry]);
+
+  const totalMinutes = useMemo(() => {
+    const completed = timeEntries.reduce(
+      (sum, entry) => sum + (entry.durationMinutes ?? 0),
+      0,
+    );
+    if (!runningEntry) return completed;
+    const live = Math.max(
+      0,
+      Math.round(
+        (now - new Date(runningEntry.startedAt).getTime()) / 60000,
+      ),
+    );
+    return completed + live;
+  }, [timeEntries, runningEntry, now]);
 
   if (isLoading) {
     return (
@@ -290,6 +383,162 @@ export default function WorkRequestDetailPage() {
               ) : (
                 <p className="mt-4 text-xs text-gray-500">
                   Alleen de technische dienst kan de voortgang bijwerken.
+                </p>
+              )}
+            </div>
+
+            {/* Time registration */}
+            <div className="card">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                    Tijdsregistratie
+                  </h2>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">
+                    {formatDuration(totalMinutes)}
+                    <span className="ml-2 text-sm font-normal text-gray-500">
+                      totaal
+                    </span>
+                  </p>
+                </div>
+
+                {canEdit && (
+                  <div>
+                    {runningEntry ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          stopTimerMutation.mutate(runningEntry.id)
+                        }
+                        disabled={stopTimerMutation.isPending}
+                        className="inline-flex items-center gap-2 rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-danger-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <span className="h-2.5 w-2.5 rounded-sm bg-white" />
+                        {stopTimerMutation.isPending
+                          ? 'Bezig met stoppen...'
+                          : 'Stoppen'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startTimerMutation.mutate()}
+                        disabled={startTimerMutation.isPending}
+                        className="inline-flex items-center gap-2 rounded-lg bg-success-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-success-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />
+                        {startTimerMutation.isPending
+                          ? 'Bezig met starten...'
+                          : 'Starten'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {runningEntry && (
+                <div className="mt-4 flex items-center justify-between rounded-lg border border-success-200 bg-success-50 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-success-500" />
+                    <span className="text-sm text-success-800">
+                      Loopt sinds {formatDateTime(runningEntry.startedAt)}
+                    </span>
+                  </div>
+                  <span className="font-mono text-sm font-semibold text-success-900">
+                    {formatDuration(liveDurationMinutes(runningEntry.startedAt))}
+                  </span>
+                </div>
+              )}
+
+              <div className="mt-5">
+                {timeEntriesLoading ? (
+                  <p className="text-sm text-gray-500">
+                    Tijdsregistraties laden...
+                  </p>
+                ) : timeEntries.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    Nog geen tijdsregistratie. Klik op &laquo;Starten&raquo; om
+                    te beginnen.
+                  </p>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-gray-100">
+                    <table className="min-w-full divide-y divide-gray-100 text-sm">
+                      <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">
+                            Medewerker
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            Begin
+                          </th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            Einde
+                          </th>
+                          <th className="px-3 py-2 text-right font-medium">
+                            Duur
+                          </th>
+                          {canEdit && <th className="px-3 py-2" />}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {timeEntries.map((entry) => {
+                          const running = !entry.endedAt;
+                          const minutes = running
+                            ? liveDurationMinutes(entry.startedAt)
+                            : entry.durationMinutes ?? 0;
+                          return (
+                            <tr key={entry.id}>
+                              <td className="px-3 py-2 text-gray-900">
+                                {entry.user?.displayName ?? 'Onbekend'}
+                              </td>
+                              <td className="px-3 py-2 text-gray-700">
+                                {formatDateTime(entry.startedAt)}
+                              </td>
+                              <td className="px-3 py-2 text-gray-700">
+                                {entry.endedAt ? (
+                                  formatDateTime(entry.endedAt)
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-success-700">
+                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success-500" />
+                                    Loopt
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-gray-900">
+                                {formatDuration(minutes)}
+                              </td>
+                              {canEdit && (
+                                <td className="px-3 py-2 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (
+                                        confirm(
+                                          'Deze tijdsregistratie verwijderen?',
+                                        )
+                                      ) {
+                                        deleteEntryMutation.mutate(entry.id);
+                                      }
+                                    }}
+                                    disabled={deleteEntryMutation.isPending}
+                                    className="text-xs text-gray-400 hover:text-danger-600 disabled:opacity-50"
+                                    aria-label="Verwijderen"
+                                  >
+                                    Verwijderen
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {!canEdit && (
+                <p className="mt-4 text-xs text-gray-500">
+                  Alleen de technische dienst kan tijd registreren.
                 </p>
               )}
             </div>

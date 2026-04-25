@@ -57,6 +57,19 @@ export interface Comment {
   user: { displayName: string; email: string; avatarUrl?: string };
 }
 
+export interface TimeEntry {
+  id: string;
+  workRequestId: string;
+  userId: string;
+  startedAt: string;
+  endedAt?: string | null;
+  durationMinutes?: number | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: { displayName: string; email?: string; avatarUrl?: string };
+}
+
 // Task types
 export type TaskStatus = 'OPEN' | 'IN_UITVOERING' | 'AFGEWERKT' | 'ON_HOLD';
 

@@ -48,6 +48,7 @@ model User {
   notifications        Notification[]
   comments             Comment[]
   auditLogs            AuditLog[]
+  timeEntries          TimeEntry[]
 
   @@map("users")
 }
@@ -226,6 +227,7 @@ model WorkRequest {
   tasks        Task[]        @relation("TaskFromRequest")
   project      Project?      @relation("ProjectFromRequest")
   purchases    PurchaseRequest[] @relation("PurchaseFromRequest")
+  timeEntries  TimeEntry[]
   bundleId     String?       @map("bundle_id")
   bundle       RequestBundle? @relation(fields: [bundleId], references: [id])
 
@@ -234,6 +236,25 @@ model WorkRequest {
   @@index([requestedById])
   @@index([createdAt])
   @@map("work_requests")
+}
+
+model TimeEntry {
+  id              String    @id @default(uuid())
+  workRequestId   String    @map("work_request_id")
+  userId          String    @map("user_id")
+  startedAt       DateTime  @map("started_at")
+  endedAt         DateTime? @map("ended_at")
+  durationMinutes Int?      @map("duration_minutes")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  workRequest WorkRequest @relation(fields: [workRequestId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@index([workRequestId])
+  @@index([userId])
+  @@map("time_entries")
 }
 
 model RequestBundle {
