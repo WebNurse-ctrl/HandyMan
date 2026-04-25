@@ -8,8 +8,8 @@ import AppLayout from '@/components/layout/AppLayout';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityIndicator from '@/components/ui/PriorityIndicator';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
-import { formatDateTime } from '@/lib/utils';
-import { Comment, TimeEntry, WorkRequest } from '@/types';
+import { PRIORITY_OPTIONS, cn, formatDateTime } from '@/lib/utils';
+import { Comment, Priority, TimeEntry, WorkRequest } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 
 const PROGRESS_STEPS = [0, 20, 40, 60, 80, 100] as const;
@@ -151,6 +151,18 @@ export default function WorkRequestDetailPage() {
       toast.success('Tijdsregistratie gestopt');
     },
     onError: () => toast.error('Stoppen mislukt'),
+  });
+
+  const priorityMutation = useMutation({
+    mutationFn: (priority: Priority) =>
+      apiPatch<WorkRequest>(`/api/work-requests/${id}`, { priority }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['work-request', id], updated);
+      queryClient.invalidateQueries({ queryKey: ['work-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Prioriteit bijgewerkt');
+    },
+    onError: () => toast.error('Bijwerken mislukt'),
   });
 
   const deleteEntryMutation = useMutation({
@@ -620,6 +632,49 @@ export default function WorkRequestDetailPage() {
 
           {/* Side column */}
           <div className="space-y-6">
+            {/* Priority */}
+            <div className="card">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                Prioriteit
+              </h2>
+              {canEdit ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {PRIORITY_OPTIONS.map((p) => {
+                    const selected = workRequest.priority === p.value;
+                    return (
+                      <button
+                        key={p.value}
+                        type="button"
+                        disabled={priorityMutation.isPending}
+                        onClick={() => priorityMutation.mutate(p.value)}
+                        className={cn(
+                          'flex items-center justify-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60',
+                          selected
+                            ? cn(p.border, p.bg, p.text, 'ring-2 ring-offset-1', p.ring)
+                            : 'border-gray-200 text-gray-600 hover:border-gray-300',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'h-1.5 w-1.5 rounded-full',
+                            selected ? p.dot : 'bg-gray-300',
+                          )}
+                        />
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div>
+                  <PriorityIndicator priority={workRequest.priority} />
+                  <p className="mt-3 text-xs text-gray-500">
+                    Alleen de technische dienst kan de prioriteit aanpassen.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="card">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
                 Details

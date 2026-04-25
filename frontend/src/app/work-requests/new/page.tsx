@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import AppLayout from '@/components/layout/AppLayout';
 import { apiGet, apiPost } from '@/lib/api';
+import { PRIORITY_OPTIONS, cn } from '@/lib/utils';
 import { Campus, Category } from '@/types';
 
 interface BuildingOption {
@@ -362,36 +363,33 @@ export default function NewWorkRequestPage() {
 
           <div>
             <label className="label">Prioriteit</label>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { value: 'LAAG', label: 'Laag', color: 'border-gray-300' },
-                {
-                  value: 'NORMAAL',
-                  label: 'Normaal',
-                  color: 'border-primary-300',
-                },
-                { value: 'HOOG', label: 'Hoog', color: 'border-warning-300' },
-                {
-                  value: 'URGENT',
-                  label: 'Urgent',
-                  color: 'border-danger-300',
-                },
-              ].map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() =>
-                    setFormData({ ...formData, priority: p.value })
-                  }
-                  className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${
-                    formData.priority === p.value
-                      ? `${p.color} bg-gray-50 ring-2 ring-offset-1`
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {PRIORITY_OPTIONS.map((p) => {
+                const selected = formData.priority === p.value;
+                return (
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, priority: p.value })
+                    }
+                    className={cn(
+                      'flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all',
+                      selected
+                        ? cn(p.border, p.bg, p.text, 'ring-2 ring-offset-1', p.ring)
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full',
+                        selected ? p.dot : 'bg-gray-300',
+                      )}
+                    />
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
