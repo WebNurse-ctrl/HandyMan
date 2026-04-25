@@ -20,13 +20,6 @@ function snapToStep(value: number): number {
   );
 }
 
-function progressColor(value: number): string {
-  if (value >= 100) return 'bg-success-500';
-  if (value >= 60) return 'bg-primary-500';
-  if (value >= 20) return 'bg-warning-500';
-  return 'bg-gray-300';
-}
-
 function initials(name?: string): string {
   if (!name) return '?';
   return name
@@ -209,91 +202,6 @@ export default function WorkRequestDetailPage() {
               )}
             </div>
 
-            {/* Progress */}
-            <div className="card">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-                  Werkvooruitgang
-                </h2>
-                <span className="text-2xl font-bold text-gray-900">
-                  {progressDraft}%
-                </span>
-              </div>
-
-              <div className="mt-4">
-                <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
-                  <div
-                    className={`h-full rounded-full transition-all ${progressColor(
-                      progressDraft,
-                    )}`}
-                    style={{ width: `${progressDraft}%` }}
-                  />
-                </div>
-
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={20}
-                  value={progressDraft}
-                  disabled={!canEdit || progressMutation.isPending}
-                  onChange={(e) =>
-                    setProgressDraft(snapToStep(Number(e.target.value)))
-                  }
-                  className="mt-4 w-full cursor-pointer accent-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-                />
-
-                <div className="mt-2 flex justify-between text-xs text-gray-500">
-                  {PROGRESS_STEPS.map((step) => (
-                    <button
-                      key={step}
-                      type="button"
-                      disabled={!canEdit || progressMutation.isPending}
-                      onClick={() => setProgressDraft(step)}
-                      className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
-                        progressDraft === step
-                          ? 'bg-primary-100 text-primary-700'
-                          : 'hover:bg-gray-100'
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
-                    >
-                      {step}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {canEdit ? (
-                <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
-                  {progressDirty && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setProgressDraft(workRequest.progress ?? 0)
-                      }
-                      disabled={progressMutation.isPending}
-                      className="btn-ghost"
-                    >
-                      Annuleren
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={!progressDirty || progressMutation.isPending}
-                    onClick={() => progressMutation.mutate(progressDraft)}
-                    className="btn-primary"
-                  >
-                    {progressMutation.isPending
-                      ? 'Bezig met opslaan...'
-                      : 'Voortgang opslaan'}
-                  </button>
-                </div>
-              ) : (
-                <p className="mt-4 text-xs text-gray-500">
-                  Alleen de technische dienst kan de voortgang bijwerken.
-                </p>
-              )}
-            </div>
-
             {/* Feedback / Comments */}
             <div className="card">
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
@@ -434,6 +342,82 @@ export default function WorkRequestDetailPage() {
                   </div>
                 )}
               </dl>
+            </div>
+
+            {/* Progress */}
+            <div className="card">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  Werkvooruitgang
+                </h2>
+                <span className="text-2xl font-bold text-gray-900">
+                  {progressDraft}%
+                </span>
+              </div>
+
+              <div className="mt-4">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={20}
+                  value={progressDraft}
+                  disabled={!canEdit || progressMutation.isPending}
+                  onChange={(e) =>
+                    setProgressDraft(snapToStep(Number(e.target.value)))
+                  }
+                  className="w-full cursor-pointer accent-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+
+                <div className="mt-2 flex justify-between text-xs text-gray-500">
+                  {PROGRESS_STEPS.map((step) => (
+                    <button
+                      key={step}
+                      type="button"
+                      disabled={!canEdit || progressMutation.isPending}
+                      onClick={() => setProgressDraft(step)}
+                      className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
+                        progressDraft === step
+                          ? 'bg-primary-100 text-primary-700'
+                          : 'hover:bg-gray-100'
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      {step}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {canEdit ? (
+                <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+                  {progressDirty && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setProgressDraft(workRequest.progress ?? 0)
+                      }
+                      disabled={progressMutation.isPending}
+                      className="btn-ghost"
+                    >
+                      Annuleren
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!progressDirty || progressMutation.isPending}
+                    onClick={() => progressMutation.mutate(progressDraft)}
+                    className="btn-primary"
+                  >
+                    {progressMutation.isPending
+                      ? 'Bezig met opslaan...'
+                      : 'Voortgang opslaan'}
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-4 text-xs text-gray-500">
+                  Alleen de technische dienst kan de voortgang bijwerken.
+                </p>
+              )}
             </div>
           </div>
         </div>

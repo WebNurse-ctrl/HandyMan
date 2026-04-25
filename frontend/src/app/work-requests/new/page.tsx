@@ -362,19 +362,39 @@ export default function NewWorkRequestPage() {
 
           <div>
             <label className="label">Prioriteit</label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="flex flex-nowrap gap-2">
               {[
-                { value: 'LAAG', label: 'Laag', color: 'border-gray-300' },
+                {
+                  value: 'LAAG',
+                  label: 'Laag',
+                  border: 'border-gray-400',
+                  text: 'text-gray-700',
+                  bg: 'bg-gray-50',
+                  ring: 'ring-gray-400',
+                },
                 {
                   value: 'NORMAAL',
                   label: 'Normaal',
-                  color: 'border-primary-300',
+                  border: 'border-primary-500',
+                  text: 'text-primary-700',
+                  bg: 'bg-primary-50',
+                  ring: 'ring-primary-500',
                 },
-                { value: 'HOOG', label: 'Hoog', color: 'border-warning-300' },
+                {
+                  value: 'HOOG',
+                  label: 'Hoog',
+                  border: 'border-warning-500',
+                  text: 'text-warning-700',
+                  bg: 'bg-warning-50',
+                  ring: 'ring-warning-500',
+                },
                 {
                   value: 'URGENT',
                   label: 'Urgent',
-                  color: 'border-danger-300',
+                  border: 'border-danger-500',
+                  text: 'text-danger-700',
+                  bg: 'bg-danger-50',
+                  ring: 'ring-danger-500',
                 },
               ].map((p) => (
                 <button
@@ -383,10 +403,10 @@ export default function NewWorkRequestPage() {
                   onClick={() =>
                     setFormData({ ...formData, priority: p.value })
                   }
-                  className={`rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${
+                  className={`flex-1 whitespace-nowrap rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${p.border} ${p.text} ${
                     formData.priority === p.value
-                      ? `${p.color} bg-gray-50 ring-2 ring-offset-1`
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      ? `${p.bg} ring-2 ring-offset-1 ${p.ring}`
+                      : 'hover:bg-gray-50'
                   }`}
                 >
                   {p.label}
