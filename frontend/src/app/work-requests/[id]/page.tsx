@@ -4,7 +4,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft } from 'lucide-react';
+import {
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Tag,
+  User as UserIcon,
+} from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityIndicator from '@/components/ui/PriorityIndicator';
@@ -15,6 +23,14 @@ import { formatDateTime } from '@/lib/utils';
 import { Comment, WorkRequest } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOCKED LAYOUT — see frontend/CLAUDE.md / docs/UI_INVARIANTS.md
+//   • Voortgang-kaart hoort in de RECHTER zijbalk (lg:col-span-1), bovenaan.
+//   • Details-kaart staat onder Voortgang en gebruikt iconen per veld.
+//   • Hoofdkolom (lg:col-span-2) bevat: Omschrijving + Feedback.
+// Verplaats deze blokken NIET zonder expliciete vraag van de gebruiker.
+// ─────────────────────────────────────────────────────────────────────────────
 
 const PROGRESS_STEPS = [0, 20, 40, 60, 80, 100] as const;
 
@@ -170,7 +186,7 @@ export default function WorkRequestDetailPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Main */}
+          {/* Hoofdkolom: omschrijving + feedback */}
           <div className="space-y-6 lg:col-span-2">
             <div className="card">
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -188,92 +204,6 @@ export default function WorkRequestDetailPage() {
                     {workRequest.rejectionReason}
                   </p>
                 </div>
-              )}
-            </div>
-
-            <div className="card">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Werkvooruitgang
-                </h2>
-                <span className="text-3xl font-bold tracking-tight text-foreground tabular-nums">
-                  {progressDraft}
-                  <span className="ml-0.5 text-base font-medium text-muted-foreground">%</span>
-                </span>
-              </div>
-
-              <div className="mt-4">
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all duration-500',
-                      progressColor(progressDraft),
-                    )}
-                    style={{ width: `${progressDraft}%` }}
-                  />
-                </div>
-
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={20}
-                  value={progressDraft}
-                  disabled={!canEdit || progressMutation.isPending}
-                  onChange={(e) =>
-                    setProgressDraft(snapToStep(Number(e.target.value)))
-                  }
-                  className="mt-4 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-60"
-                />
-
-                <div className="mt-2 flex justify-between gap-1">
-                  {PROGRESS_STEPS.map((step) => (
-                    <button
-                      key={step}
-                      type="button"
-                      disabled={!canEdit || progressMutation.isPending}
-                      onClick={() => setProgressDraft(step)}
-                      className={cn(
-                        'rounded-md px-2 py-0.5 text-xs font-medium tabular-nums transition-colors',
-                        progressDraft === step
-                          ? 'bg-primary/15 text-primary'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                        'disabled:cursor-not-allowed disabled:opacity-60',
-                      )}
-                    >
-                      {step}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {canEdit ? (
-                <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-                  {progressDirty && (
-                    <button
-                      type="button"
-                      onClick={() => setProgressDraft(workRequest.progress ?? 0)}
-                      disabled={progressMutation.isPending}
-                      className="btn-ghost"
-                    >
-                      Annuleren
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={!progressDirty || progressMutation.isPending}
-                    onClick={() => progressMutation.mutate(progressDraft)}
-                    className="btn-primary"
-                  >
-                    {progressMutation.isPending
-                      ? 'Bezig met opslaan...'
-                      : 'Voortgang opslaan'}
-                  </button>
-                </div>
-              ) : (
-                <p className="mt-4 text-xs text-muted-foreground">
-                  Alleen de technische dienst kan de voortgang bijwerken.
-                </p>
               )}
             </div>
 
@@ -358,14 +288,102 @@ export default function WorkRequestDetailPage() {
             </div>
           </div>
 
-          {/* Side */}
-          <div className="space-y-6">
+          {/* Rechterzijbalk: voortgang + details */}
+          <aside className="space-y-6">
+            {/* ─── Voortgangsindicator (BLIJFT in deze rechterzijbalk) ─── */}
+            <div className="card">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Werkvooruitgang
+                </h2>
+                <span className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
+                  {progressDraft}
+                  <span className="ml-0.5 text-sm font-medium text-muted-foreground">
+                    %
+                  </span>
+                </span>
+              </div>
+
+              <div className="mt-4">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-500',
+                      progressColor(progressDraft),
+                    )}
+                    style={{ width: `${progressDraft}%` }}
+                  />
+                </div>
+
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={20}
+                  value={progressDraft}
+                  disabled={!canEdit || progressMutation.isPending}
+                  onChange={(e) =>
+                    setProgressDraft(snapToStep(Number(e.target.value)))
+                  }
+                  className="mt-4 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-60"
+                />
+
+                <div className="mt-2 flex justify-between gap-1">
+                  {PROGRESS_STEPS.map((step) => (
+                    <button
+                      key={step}
+                      type="button"
+                      disabled={!canEdit || progressMutation.isPending}
+                      onClick={() => setProgressDraft(step)}
+                      className={cn(
+                        'rounded-md px-1.5 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
+                        progressDraft === step
+                          ? 'bg-primary/15 text-primary'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                        'disabled:cursor-not-allowed disabled:opacity-60',
+                      )}
+                    >
+                      {step}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {canEdit ? (
+                <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+                  {progressDirty && (
+                    <button
+                      type="button"
+                      onClick={() => setProgressDraft(workRequest.progress ?? 0)}
+                      disabled={progressMutation.isPending}
+                      className="btn-ghost h-9 px-3"
+                    >
+                      Annuleren
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!progressDirty || progressMutation.isPending}
+                    onClick={() => progressMutation.mutate(progressDraft)}
+                    className="btn-primary h-9 px-3"
+                  >
+                    {progressMutation.isPending ? 'Opslaan...' : 'Opslaan'}
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-4 text-xs text-muted-foreground">
+                  Alleen de technische dienst kan de voortgang bijwerken.
+                </p>
+              )}
+            </div>
+
+            {/* ─── Details (met iconen per veld — BLIJVEN behouden) ─── */}
             <div className="card">
               <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Details
               </h2>
               <dl className="space-y-4 text-sm">
-                <DetailItem label="Aanvrager">
+                <DetailRow icon={<UserIcon />} label="Aanvrager">
                   <div className="flex items-center gap-2.5">
                     <div className="avatar-fallback h-8 w-8 text-xs">
                       {getInitials(workRequest.requestedBy?.displayName)}
@@ -379,44 +397,62 @@ export default function WorkRequestDetailPage() {
                       </p>
                     </div>
                   </div>
-                </DetailItem>
-                <DetailItem label="Campus">{workRequest.campus?.name ?? '—'}</DetailItem>
+                </DetailRow>
+
+                <DetailRow icon={<Building2 />} label="Campus">
+                  {workRequest.campus?.name ?? '—'}
+                </DetailRow>
+
                 {workRequest.location && (
-                  <DetailItem label="Locatie">{workRequest.location.name}</DetailItem>
+                  <DetailRow icon={<MapPin />} label="Locatie">
+                    {workRequest.location.name}
+                  </DetailRow>
                 )}
+
                 {workRequest.category && (
-                  <DetailItem label="Categorie">{workRequest.category.name}</DetailItem>
+                  <DetailRow icon={<Tag />} label="Categorie">
+                    {workRequest.category.name}
+                  </DetailRow>
                 )}
-                <DetailItem label="Laatst bijgewerkt">
+
+                <DetailRow icon={<Clock />} label="Laatst bijgewerkt">
                   {formatDateTime(workRequest.updatedAt)}
-                </DetailItem>
+                </DetailRow>
+
                 {workRequest.resolvedAt && (
-                  <DetailItem label="Afgewerkt op">
+                  <DetailRow icon={<CheckCircle2 />} label="Afgewerkt op">
                     {formatDateTime(workRequest.resolvedAt)}
-                  </DetailItem>
+                  </DetailRow>
                 )}
               </dl>
             </div>
-          </div>
+          </aside>
         </div>
       </div>
     </AppLayout>
   );
 }
 
-function DetailItem({
+function DetailRow({
+  icon,
   label,
   children,
 }: {
+  icon: React.ReactNode;
   label: string;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-1 text-sm text-foreground">{children}</dd>
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground [&>svg]:h-4 [&>svg]:w-4">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </dt>
+        <dd className="mt-0.5 text-sm text-foreground">{children}</dd>
+      </div>
     </div>
   );
 }
