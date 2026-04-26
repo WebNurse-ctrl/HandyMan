@@ -54,6 +54,119 @@ function liveDurationMinutes(startedAt: string): number {
   );
 }
 
+const ICON_PROPS = {
+  className: 'h-3.5 w-3.5 text-gray-400',
+  fill: 'none' as const,
+  viewBox: '0 0 24 24',
+  strokeWidth: 1.8,
+  stroke: 'currentColor' as const,
+};
+
+const Icons = {
+  user: (
+    <svg {...ICON_PROPS}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0v.75H4.5v-.75z"
+      />
+    </svg>
+  ),
+  campus: (
+    <svg {...ICON_PROPS}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2.25 21h19.5M3.75 21V8.25h4.5V21M8.25 21V3.75h7.5V21M15.75 21V10.5h4.5V21M6 11.25h.75M6 14.25h.75M6 17.25h.75M11.25 6h1.5M11.25 9h1.5M11.25 12h1.5M11.25 15h1.5"
+      />
+    </svg>
+  ),
+  building: (
+    <svg {...ICON_PROPS}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.75 21V5.25A1.5 1.5 0 015.25 3.75h9A1.5 1.5 0 0115.75 5.25V21M15.75 9.75h3a1.5 1.5 0 011.5 1.5V21M3 21h18M7.5 7.5h.75M7.5 10.5h.75M7.5 13.5h.75M11.25 7.5h.75M11.25 10.5h.75M11.25 13.5h.75M9 21v-3.75h2.25V21"
+      />
+    </svg>
+  ),
+  department: (
+    <svg {...ICON_PROPS}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.75 6.75h6.75v6.75H3.75zM13.5 3.75h6.75v6.75H13.5zM13.5 13.5h6.75v6.75H13.5zM3.75 16.5h6.75v3.75H3.75z"
+      />
+    </svg>
+  ),
+  room: (
+    <svg {...ICON_PROPS}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2.25 12L12 3l9.75 9M4.5 10.5V21h6v-6h3v6h6V10.5"
+      />
+    </svg>
+  ),
+  category: (
+    <svg {...ICON_PROPS}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581a2.25 2.25 0 003.182 0l4.318-4.318a2.25 2.25 0 000-3.182L11.16 3.659A2.25 2.25 0 009.568 3zM6 6h.008v.008H6V6z"
+      />
+    </svg>
+  ),
+  clock: (
+    <svg {...ICON_PROPS}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 6v6l4 2m5-2a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  ),
+  check: (
+    <svg {...ICON_PROPS}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  ),
+};
+
+function DetailRow({
+  icon,
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <dt className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-500">
+        {icon}
+        {label}
+      </dt>
+      <dd className="mt-0.5 pl-5 text-gray-900">{children}</dd>
+    </div>
+  );
+}
+
+function formatRoomLabel(room: {
+  name?: string | null;
+  number?: string | null;
+}): string {
+  const number = room.number?.trim();
+  const name = room.name?.trim();
+  if (number && name) return `${number} — ${name}`;
+  return number || name || 'Onbenoemd';
+}
+
 export default function WorkRequestDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -680,62 +793,63 @@ export default function WorkRequestDetailPage() {
                 Details
               </h2>
               <dl className="space-y-3 text-sm">
-                <div>
-                  <dt className="text-xs font-medium uppercase text-gray-500">
-                    Aanvrager
-                  </dt>
-                  <dd className="mt-0.5 text-gray-900">
+                <DetailRow icon={Icons.user} label="Aanvrager">
+                  <div className="text-gray-900">
                     {workRequest.requestedBy?.displayName}
-                  </dd>
-                  <dd className="text-xs text-gray-500">
+                  </div>
+                  <div className="text-xs text-gray-500">
                     {workRequest.requestedBy?.email}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium uppercase text-gray-500">
-                    Campus
-                  </dt>
-                  <dd className="mt-0.5 text-gray-900">
-                    {workRequest.campus?.name ?? '—'}
-                  </dd>
-                </div>
-                {workRequest.location && (
-                  <div>
-                    <dt className="text-xs font-medium uppercase text-gray-500">
-                      Locatie
-                    </dt>
-                    <dd className="mt-0.5 text-gray-900">
-                      {workRequest.location.name}
-                    </dd>
                   </div>
+                </DetailRow>
+
+                <DetailRow icon={Icons.campus} label="Campus">
+                  {workRequest.campus?.name ?? '—'}
+                </DetailRow>
+
+                {workRequest.building && (
+                  <DetailRow icon={Icons.building} label="Gebouw">
+                    {workRequest.building.name}
+                    {workRequest.building.code ? (
+                      <span className="text-xs text-gray-500">
+                        {' '}
+                        ({workRequest.building.code})
+                      </span>
+                    ) : null}
+                  </DetailRow>
                 )}
+
+                {workRequest.department && (
+                  <DetailRow icon={Icons.department} label="Afdeling">
+                    {workRequest.department.name}
+                  </DetailRow>
+                )}
+
+                {workRequest.room && (
+                  <DetailRow icon={Icons.room} label="Kamer">
+                    {formatRoomLabel(workRequest.room)}
+                  </DetailRow>
+                )}
+
+                {workRequest.location && !workRequest.building && !workRequest.department && (
+                  <DetailRow icon={Icons.room} label="Locatie">
+                    {workRequest.location.name}
+                  </DetailRow>
+                )}
+
                 {workRequest.category && (
-                  <div>
-                    <dt className="text-xs font-medium uppercase text-gray-500">
-                      Categorie
-                    </dt>
-                    <dd className="mt-0.5 text-gray-900">
-                      {workRequest.category.name}
-                    </dd>
-                  </div>
+                  <DetailRow icon={Icons.category} label="Categorie">
+                    {workRequest.category.name}
+                  </DetailRow>
                 )}
-                <div>
-                  <dt className="text-xs font-medium uppercase text-gray-500">
-                    Laatst bijgewerkt
-                  </dt>
-                  <dd className="mt-0.5 text-gray-900">
-                    {formatDateTime(workRequest.updatedAt)}
-                  </dd>
-                </div>
+
+                <DetailRow icon={Icons.clock} label="Laatst bijgewerkt">
+                  {formatDateTime(workRequest.updatedAt)}
+                </DetailRow>
+
                 {workRequest.resolvedAt && (
-                  <div>
-                    <dt className="text-xs font-medium uppercase text-gray-500">
-                      Afgewerkt op
-                    </dt>
-                    <dd className="mt-0.5 text-gray-900">
-                      {formatDateTime(workRequest.resolvedAt)}
-                    </dd>
-                  </div>
+                  <DetailRow icon={Icons.check} label="Afgewerkt op">
+                    {formatDateTime(workRequest.resolvedAt)}
+                  </DetailRow>
                 )}
               </dl>
             </div>
