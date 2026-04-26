@@ -3,7 +3,9 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { AlertCircle, Wrench } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import Spinner from '@/components/ui/Spinner';
 
 const errorMessages: Record<string, string> = {
   azure_denied: 'Toegang geweigerd door Microsoft',
@@ -56,47 +58,60 @@ function LoginContent() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="w-full max-w-md px-4">
-        <div className="card text-center">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-600 shadow-lg">
-            <svg
-              className="h-8 w-8 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"
-              />
-            </svg>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
+      {/* Decorative gradient orbs */}
+      <div
+        className="pointer-events-none absolute -top-40 left-1/2 h-[40rem] w-[40rem] -translate-x-1/2 rounded-full opacity-30 blur-3xl"
+        style={{
+          background:
+            'radial-gradient(circle, rgb(var(--primary)) 0%, transparent 70%)',
+        }}
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute -bottom-40 right-0 h-[30rem] w-[30rem] rounded-full opacity-20 blur-3xl"
+        style={{
+          background:
+            'radial-gradient(circle, rgb(var(--accent)) 0%, transparent 70%)',
+        }}
+        aria-hidden="true"
+      />
+
+      <div className="relative w-full max-w-md">
+        <div className="card-elevated text-center">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl shadow-glow"
+            style={{ background: 'linear-gradient(135deg, rgb(var(--primary)) 0%, rgb(var(--accent)) 100%)' }}
+          >
+            <Wrench className="h-8 w-8 text-white" strokeWidth={2.25} />
           </div>
 
-          <h1 className="text-2xl font-bold text-gray-900">HandyMan</h1>
-          <p className="mt-2 text-sm text-gray-500">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            <span className="text-gradient-brand">HandyMan</span>
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Facility Management Platform
           </p>
 
           {errorCode && (
-            <div className="mt-4 rounded-lg bg-danger-50 border border-danger-200 p-4 text-left">
-              <p className="text-sm font-medium text-danger-700">
-                {errorMessages[errorCode] || 'Onbekende fout'}
-              </p>
-              {errorDetail && (
-                <p className="mt-2 text-xs text-danger-600 break-all">
-                  {errorDetail}
+            <div className="mt-5 flex gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-left">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-destructive">
+                  {errorMessages[errorCode] || 'Onbekende fout'}
                 </p>
-              )}
+                {errorDetail && (
+                  <p className="mt-1 text-xs text-destructive/80 break-all">
+                    {errorDetail}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
           <div className="mt-8">
             <button
               onClick={handleLogin}
-              className="btn-primary w-full gap-3 py-3"
+              className="btn-primary h-12 w-full gap-3 text-base"
             >
               <svg className="h-5 w-5" viewBox="0 0 23 23" fill="none">
                 <path d="M11 0H0V11H11V0Z" fill="#F25022" />
@@ -108,13 +123,13 @@ function LoginContent() {
             </button>
           </div>
 
-          <p className="mt-6 text-xs text-gray-400">
+          <p className="mt-6 text-xs text-muted-foreground">
             Gebruik je werkaccount om in te loggen
           </p>
         </div>
 
-        <p className="mt-8 text-center text-xs text-gray-400">
-          HandyMan v1.0 &middot; Facility Management
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          HandyMan v1.4 &middot; Facility Management
         </p>
       </div>
     </div>
@@ -123,11 +138,13 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <Spinner size={32} />
+        </div>
+      }
+    >
       <LoginContent />
     </Suspense>
   );

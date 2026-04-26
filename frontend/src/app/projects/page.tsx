@@ -3,11 +3,18 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { Plus, ListChecks, ShoppingBag } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import StatusBadge from '@/components/ui/StatusBadge';
+import PageHeader from '@/components/ui/PageHeader';
+import FilterChips from '@/components/ui/FilterChips';
+import Avatar from '@/components/ui/Avatar';
+import Skeleton from '@/components/ui/Skeleton';
+import EmptyState from '@/components/ui/EmptyState';
 import { apiGet } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { Project, PaginatedResponse } from '@/types';
+import { cn } from '@/lib/utils';
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -35,76 +42,73 @@ export default function ProjectsPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Projecten</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Overzicht van alle projecten met budget- en voortgangsinfo
-            </p>
-          </div>
-          <button
-            onClick={() => router.push('/projects/new')}
-            className="btn-primary gap-2"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Nieuw project
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {statuses.map((s) => (
+        <PageHeader
+          title="Projecten"
+          description="Overzicht van alle projecten met budget- en voortgangsinfo"
+          actions={
             <button
-              key={s.value}
-              onClick={() => {
-                setStatusFilter(s.value);
-                setPage(1);
-              }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                statusFilter === s.value
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              type="button"
+              onClick={() => router.push('/projects/new')}
+              className="btn-primary"
             >
-              {s.label}
+              <Plus className="h-4 w-4" />
+              Nieuw project
             </button>
-          ))}
-        </div>
+          }
+        />
 
-        {/* Project cards grid */}
+        <FilterChips
+          options={statuses}
+          value={statusFilter}
+          onChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        />
+
         {isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="card animate-pulse">
-                <div className="h-4 w-2/3 rounded bg-gray-200" />
-                <div className="mt-3 h-3 w-1/2 rounded bg-gray-100" />
-                <div className="mt-4 h-2 w-full rounded-full bg-gray-200" />
+              <div key={i} className="card space-y-3">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-2 w-full" />
+                <Skeleton className="h-3 w-1/3" />
               </div>
             ))}
           </div>
+        ) : data?.data.length === 0 ? (
+          <EmptyState
+            title="Geen projecten gevonden"
+            description="Probeer een andere status, of maak een nieuw project aan."
+          />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {data?.data.map((project) => {
               const budgetPercent =
                 project.budgetApproved && project.budgetApproved > 0
-                  ? Math.round(
-                      (project.budgetSpent / project.budgetApproved) * 100,
-                    )
+                  ? Math.round((project.budgetSpent / project.budgetApproved) * 100)
                   : 0;
+              const tone =
+                budgetPercent > 90
+                  ? 'bg-destructive'
+                  : budgetPercent > 70
+                    ? 'bg-warning'
+                    : 'bg-primary';
 
               return (
-                <div
+                <button
                   key={project.id}
+                  type="button"
                   onClick={() => router.push(`/projects/${project.id}`)}
-                  className="card cursor-pointer transition-shadow hover:shadow-soft"
+                  className="card group flex flex-col items-stretch text-left transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-soft"
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-mono text-xs text-gray-400">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[11px] text-muted-foreground">
                         {project.projectNumber}
                       </p>
-                      <h3 className="mt-1 font-semibold text-gray-900">
+                      <h3 className="mt-1 font-semibold text-foreground transition-colors group-hover:text-primary">
                         {project.name}
                       </h3>
                     </div>
@@ -112,71 +116,62 @@ export default function ProjectsPage() {
                   </div>
 
                   {project.campus && (
-                    <p className="mt-2 text-xs text-gray-500">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       {project.campus.name}
                     </p>
                   )}
 
-                  {/* Budget bar */}
                   {project.budgetApproved && project.budgetApproved > 0 ? (
-                    <div className="mt-4">
+                    <div className="mt-5 space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500">Budget</span>
-                        <span className="font-medium text-gray-700">
+                        <span className="text-muted-foreground">Budget</span>
+                        <span className="font-medium text-foreground tabular-nums">
                           {formatCurrency(project.budgetSpent)} /{' '}
                           {formatCurrency(project.budgetApproved)}
                         </span>
                       </div>
-                      <div className="mt-1.5 h-2 w-full rounded-full bg-gray-100">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                         <div
-                          className={`h-2 rounded-full transition-all ${
-                            budgetPercent > 90
-                              ? 'bg-danger-500'
-                              : budgetPercent > 70
-                                ? 'bg-warning-500'
-                                : 'bg-success-500'
-                          }`}
-                          style={{
-                            width: `${Math.min(budgetPercent, 100)}%`,
-                          }}
+                          className={cn('h-full rounded-full transition-all', tone)}
+                          style={{ width: `${Math.min(budgetPercent, 100)}%` }}
                         />
                       </div>
+                      <p className="text-right text-[11px] font-medium tabular-nums text-muted-foreground">
+                        {budgetPercent}% gebruikt
+                      </p>
                     </div>
                   ) : (
-                    <p className="mt-4 text-xs text-gray-400">
+                    <p className="mt-5 text-xs text-muted-foreground">
                       Geen budget ingesteld
                     </p>
                   )}
 
-                  {/* Footer */}
-                  <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                  <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       {project._count && (
                         <>
-                          <span>{project._count.tasks} taken</span>
-                          <span>{project._count.purchases} aankopen</span>
+                          <span className="inline-flex items-center gap-1">
+                            <ListChecks className="h-3.5 w-3.5" />
+                            {project._count.tasks}
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <ShoppingBag className="h-3.5 w-3.5" />
+                            {project._count.purchases}
+                          </span>
                         </>
                       )}
                     </div>
                     {project.manager && (
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-[10px] font-semibold text-primary-700">
-                        {project.manager.displayName
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .slice(0, 2)}
-                      </div>
+                      <Avatar
+                        name={project.manager.displayName}
+                        src={project.manager.avatarUrl ?? null}
+                        size="sm"
+                      />
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
-
-            {data?.data.length === 0 && (
-              <div className="col-span-full py-12 text-center">
-                <p className="text-sm text-gray-500">Geen projecten gevonden</p>
-              </div>
-            )}
           </div>
         )}
       </div>

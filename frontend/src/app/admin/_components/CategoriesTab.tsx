@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface Category {
   id: string;
@@ -78,17 +80,17 @@ export default function CategoriesTab() {
         isPending={createMutation.isPending}
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 px-6 py-3">
-          <h3 className="text-sm font-semibold text-gray-900">
+      <div className="surface overflow-hidden">
+        <div className="border-b border-border px-6 py-4">
+          <h3 className="text-sm font-semibold text-foreground">
             Categorieën ({categories.length})
           </h3>
         </div>
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-border">
           {isLoading ? (
-            <div className="p-6 text-sm text-gray-500">Laden...</div>
+            <div className="p-6 text-sm text-muted-foreground">Laden...</div>
           ) : categories.length === 0 ? (
-            <div className="p-6 text-sm text-gray-500">
+            <div className="p-6 text-sm text-muted-foreground">
               Nog geen categorieën. Maak hierboven een nieuwe aan.
             </div>
           ) : (
@@ -96,9 +98,7 @@ export default function CategoriesTab() {
               <CategoryRow
                 key={cat.id}
                 category={cat}
-                onUpdate={(data) =>
-                  updateMutation.mutate({ id: cat.id, data })
-                }
+                onUpdate={(data) => updateMutation.mutate({ id: cat.id, data })}
                 onDelete={() => {
                   if (confirm(`Categorie "${cat.name}" verwijderen?`)) {
                     deleteMutation.mutate(cat.id);
@@ -131,7 +131,7 @@ function NewCategoryForm({
 }) {
   const [form, setForm] = useState({
     name: '',
-    color: '#3b82f6',
+    color: '#10b981',
     description: '',
   });
 
@@ -148,11 +148,11 @@ function NewCategoryForm({
           color: form.color,
           description: form.description || undefined,
         });
-        setForm({ name: '', color: '#3b82f6', description: '' });
+        setForm({ name: '', color: '#10b981', description: '' });
       }}
-      className="rounded-xl border border-gray-200 bg-white p-4"
+      className="card"
     >
-      <h3 className="mb-3 text-sm font-semibold text-gray-900">
+      <h3 className="mb-3 text-sm font-semibold text-foreground">
         Nieuwe categorie
       </h3>
       <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr_auto]">
@@ -178,7 +178,8 @@ function NewCategoryForm({
           disabled={isPending}
           className="btn-primary whitespace-nowrap"
         >
-          + Toevoegen
+          <Plus className="h-4 w-4" />
+          Toevoegen
         </button>
       </div>
     </form>
@@ -213,52 +214,51 @@ function CategoryRow({
     <div>
       <div className="flex items-center gap-3 px-6 py-3">
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
           className="flex flex-1 items-center gap-3 text-left"
         >
-          <svg
-            className={`h-4 w-4 text-gray-400 transition-transform ${
-              expanded ? 'rotate-90' : ''
-            }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+          <ChevronRight
+            className={cn(
+              'h-4 w-4 text-muted-foreground transition-transform',
+              expanded && 'rotate-90',
+            )}
+          />
           <div
-            className="h-4 w-4 shrink-0 rounded-full border border-gray-300"
-            style={{ backgroundColor: category.color || '#e5e7eb' }}
+            className="h-4 w-4 shrink-0 rounded-full ring-1 ring-border"
+            style={{ backgroundColor: category.color || 'rgb(var(--muted))' }}
           />
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium text-gray-900">{category.name}</p>
+            <p className="truncate font-medium text-foreground">{category.name}</p>
             {category.description && (
-              <p className="truncate text-xs text-gray-500">
+              <p className="truncate text-xs text-muted-foreground">
                 {category.description}
               </p>
             )}
           </div>
-          <span className="shrink-0 text-xs text-gray-500">
+          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
             {category.children?.length || 0} sub
           </span>
         </button>
         <button
+          type="button"
           onClick={() => setEditing(!editing)}
-          className="text-sm font-medium text-primary-600 hover:text-primary-700"
+          className="inline-flex h-8 items-center rounded-md px-2.5 text-sm font-medium text-primary hover:bg-primary/10"
         >
           {editing ? 'Sluit' : 'Bewerk'}
         </button>
         <button
+          type="button"
           onClick={onDelete}
-          className="text-sm font-medium text-danger-600 hover:text-danger-700"
+          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-sm font-medium text-destructive hover:bg-destructive/10"
         >
+          <Trash2 className="h-3.5 w-3.5" />
           Verwijder
         </button>
       </div>
 
       {editing && (
-        <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
+        <div className="border-t border-border bg-muted/40 px-6 py-4">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -294,7 +294,7 @@ function CategoryRow({
       )}
 
       {expanded && (
-        <div className="space-y-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+        <div className="space-y-3 border-t border-border bg-muted/40 px-6 py-4">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -319,12 +319,13 @@ function CategoryRow({
               onChange={(v) => setSubForm({ ...subForm, color: v })}
             />
             <button type="submit" className="btn-primary whitespace-nowrap">
-              + Sub
+              <Plus className="h-4 w-4" />
+              Sub
             </button>
           </form>
 
           {category.children && category.children.length > 0 && (
-            <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+            <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
               {category.children.map((sub) => (
                 <SubCategoryItem
                   key={sub.id}
@@ -399,20 +400,23 @@ function SubCategoryItem({
   return (
     <li className="flex items-center gap-3 px-3 py-2 text-sm">
       <div
-        className="h-4 w-4 shrink-0 rounded-full border border-gray-300"
-        style={{ backgroundColor: sub.color || '#e5e7eb' }}
+        className="h-4 w-4 shrink-0 rounded-full ring-1 ring-border"
+        style={{ backgroundColor: sub.color || 'rgb(var(--muted))' }}
       />
-      <span className="flex-1 text-gray-900">{sub.name}</span>
+      <span className="flex-1 text-foreground">{sub.name}</span>
       <button
+        type="button"
         onClick={() => setEditing(true)}
-        className="text-xs font-medium text-primary-600 hover:text-primary-700"
+        className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-primary hover:bg-primary/10"
       >
         Bewerk
       </button>
       <button
+        type="button"
         onClick={onDelete}
-        className="text-xs font-medium text-danger-600 hover:text-danger-700"
+        className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-destructive hover:bg-destructive/10"
       >
+        <Trash2 className="h-3 w-3" />
         Verwijder
       </button>
     </li>
@@ -432,7 +436,7 @@ function ColorPicker({
         type="color"
         value={HEX_RE.test(value) ? value : '#64748b'}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-12 cursor-pointer rounded-lg border border-gray-200 bg-white p-1"
+        className="h-10 w-12 cursor-pointer rounded-md border border-border bg-card p-1"
       />
       <input
         type="text"

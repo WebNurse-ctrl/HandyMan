@@ -1,5 +1,6 @@
 'use client';
 
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PaginationProps {
@@ -17,55 +18,53 @@ export default function Pagination({
 }: PaginationProps) {
   if (totalPages <= 1) return null;
 
-  const pages = [];
+  const pages: number[] = [];
   const maxVisible = 5;
   let start = Math.max(1, page - Math.floor(maxVisible / 2));
   const end = Math.min(totalPages, start + maxVisible - 1);
   if (end - start + 1 < maxVisible) {
     start = Math.max(1, end - maxVisible + 1);
   }
-
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
-  }
+  for (let i = start; i <= end; i++) pages.push(i);
 
   return (
-    <div className="flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3">
-      <p className="text-sm text-gray-500">
-        {total} resultaten
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-3">
+      <p className="text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">{total}</span> resultaten
       </p>
       <div className="flex items-center gap-1">
         <button
+          type="button"
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
-          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+          aria-label="Vorige pagina"
         >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
+          <ChevronLeft className="h-4 w-4" />
         </button>
         {pages.map((p) => (
           <button
             key={p}
+            type="button"
             onClick={() => onPageChange(p)}
             className={cn(
-              'h-8 w-8 rounded-lg text-sm font-medium transition-colors',
+              'inline-flex h-8 min-w-[2rem] items-center justify-center rounded-md px-2 text-sm font-medium transition-colors',
               p === page
-                ? 'bg-primary-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100',
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >
             {p}
           </button>
         ))}
         <button
+          type="button"
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages}
-          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+          aria-label="Volgende pagina"
         >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-          </svg>
+          <ChevronRight className="h-4 w-4" />
         </button>
       </div>
     </div>

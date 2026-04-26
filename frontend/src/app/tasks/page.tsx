@@ -3,11 +3,15 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { Plus, AlertTriangle } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityIndicator from '@/components/ui/PriorityIndicator';
 import Pagination from '@/components/ui/Pagination';
+import PageHeader from '@/components/ui/PageHeader';
+import FilterChips from '@/components/ui/FilterChips';
+import Avatar from '@/components/ui/Avatar';
 import { apiGet } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { Task, PaginatedResponse } from '@/types';
@@ -32,7 +36,7 @@ export default function TasksPage() {
       key: 'taskNumber',
       label: 'Nummer',
       render: (item: Task) => (
-        <span className="font-mono text-xs text-gray-500">
+        <span className="font-mono text-xs text-muted-foreground">
           {item.taskNumber}
         </span>
       ),
@@ -42,10 +46,10 @@ export default function TasksPage() {
       label: 'Taak',
       render: (item: Task) => (
         <div>
-          <p className="font-medium text-gray-900">{item.title}</p>
+          <p className="font-medium text-foreground">{item.title}</p>
           {item.project && (
-            <p className="text-xs text-gray-500">
-              {item.project.projectNumber} - {item.project.name}
+            <p className="text-xs text-muted-foreground">
+              {item.project.projectNumber} · {item.project.name}
             </p>
           )}
         </div>
@@ -58,19 +62,17 @@ export default function TasksPage() {
         <div className="flex items-center gap-2">
           {item.assignedTo ? (
             <>
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-[10px] font-semibold text-primary-700">
-                {item.assignedTo.displayName
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')
-                  .slice(0, 2)}
-              </div>
-              <span className="text-sm text-gray-600">
+              <Avatar
+                name={item.assignedTo.displayName}
+                src={item.assignedTo.avatarUrl ?? null}
+                size="sm"
+              />
+              <span className="text-sm text-foreground">
                 {item.assignedTo.displayName}
               </span>
             </>
           ) : (
-            <span className="text-sm text-gray-400">Niet toegewezen</span>
+            <span className="text-sm text-muted-foreground">Niet toegewezen</span>
           )}
         </div>
       ),
@@ -78,9 +80,7 @@ export default function TasksPage() {
     {
       key: 'priority',
       label: 'Prioriteit',
-      render: (item: Task) => (
-        <PriorityIndicator priority={item.priority} />
-      ),
+      render: (item: Task) => <PriorityIndicator priority={item.priority} />,
     },
     {
       key: 'status',
@@ -90,17 +90,22 @@ export default function TasksPage() {
     {
       key: 'dueDate',
       label: 'Deadline',
-      render: (item: Task) => (
-        <span
-          className={`text-sm ${
-            item.dueDate && new Date(item.dueDate) < new Date()
-              ? 'font-medium text-danger-600'
-              : 'text-gray-500'
-          }`}
-        >
-          {item.dueDate ? formatDate(item.dueDate) : '-'}
-        </span>
-      ),
+      render: (item: Task) => {
+        if (!item.dueDate) return <span className="text-sm text-muted-foreground">—</span>;
+        const overdue = new Date(item.dueDate) < new Date() && item.status !== 'AFGEWERKT';
+        return (
+          <span
+            className={
+              overdue
+                ? 'inline-flex items-center gap-1 text-sm font-medium text-destructive'
+                : 'text-sm text-muted-foreground'
+            }
+          >
+            {overdue && <AlertTriangle className="h-3.5 w-3.5" />}
+            {formatDate(item.dueDate)}
+          </span>
+        );
+      },
     },
   ];
 
@@ -115,42 +120,29 @@ export default function TasksPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Taken</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Beheer en volg alle taken op
-            </p>
-          </div>
-          <button
-            onClick={() => router.push('/tasks/new')}
-            className="btn-primary gap-2"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Nieuwe taak
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {statuses.map((s) => (
+        <PageHeader
+          title="Taken"
+          description="Beheer en volg alle taken op"
+          actions={
             <button
-              key={s.value}
-              onClick={() => {
-                setStatusFilter(s.value);
-                setPage(1);
-              }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                statusFilter === s.value
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              type="button"
+              onClick={() => router.push('/tasks/new')}
+              className="btn-primary"
             >
-              {s.label}
+              <Plus className="h-4 w-4" />
+              Nieuwe taak
             </button>
-          ))}
-        </div>
+          }
+        />
+
+        <FilterChips
+          options={statuses}
+          value={statusFilter}
+          onChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        />
 
         <DataTable
           columns={columns}

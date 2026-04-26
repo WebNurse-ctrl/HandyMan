@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { Trash2 } from 'lucide-react';
 import DataTable from '@/components/ui/DataTable';
+import Avatar from '@/components/ui/Avatar';
 import { apiGet, apiPatch, apiDelete } from '@/lib/api';
 import { User, PaginatedResponse } from '@/types';
 
@@ -65,16 +67,10 @@ export default function UsersTab() {
       label: 'Naam',
       render: (item: User) => (
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700">
-            {item.displayName
-              .split(' ')
-              .map((n) => n[0])
-              .join('')
-              .slice(0, 2)}
-          </div>
+          <Avatar name={item.displayName} src={item.avatarUrl ?? null} size="md" />
           <div>
-            <p className="font-medium text-gray-900">{item.displayName}</p>
-            <p className="text-xs text-gray-500">{item.email}</p>
+            <p className="font-medium text-foreground">{item.displayName}</p>
+            <p className="text-xs text-muted-foreground">{item.email}</p>
           </div>
         </div>
       ),
@@ -83,7 +79,7 @@ export default function UsersTab() {
       key: 'department',
       label: 'Afdeling',
       render: (item: User) => (
-        <span className="text-gray-600">{item.department || '-'}</span>
+        <span className="text-muted-foreground">{item.department || '—'}</span>
       ),
     },
     {
@@ -94,7 +90,7 @@ export default function UsersTab() {
           value={item.role}
           onChange={(e) => updateRole.mutate({ id: item.id, role: e.target.value })}
           disabled={updateRole.isPending}
-          className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-50"
+          className="input h-9 max-w-[210px] py-0 text-sm"
         >
           {Object.entries(roleLabels).map(([value, label]) => (
             <option key={value} value={value}>
@@ -108,7 +104,7 @@ export default function UsersTab() {
       key: 'lastLoginAt',
       label: 'Laatst actief',
       render: (item: User) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-muted-foreground">
           {item.lastLoginAt
             ? new Date(item.lastLoginAt).toLocaleDateString('nl-BE')
             : 'Nooit'}
@@ -120,11 +116,13 @@ export default function UsersTab() {
       label: '',
       render: (item: User) => (
         <button
+          type="button"
           onClick={() => handleDelete(item)}
           disabled={deleteUser.isPending}
-          className="rounded-lg px-2 py-1 text-sm font-medium text-danger-600 hover:bg-danger-50 disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
           title="Gebruiker verwijderen"
         >
+          <Trash2 className="h-3.5 w-3.5" />
           Verwijder
         </button>
       ),

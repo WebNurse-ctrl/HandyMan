@@ -4,78 +4,231 @@
 
 @layer base {
   :root {
-    --color-primary: 59 130 246;
-    --color-accent: 249 115 22;
+    --radius: 0.625rem;
+
+    /* Base surfaces (light - emerald preset) */
+    --background: 248 250 252;
+    --foreground: 15 23 42;
+
+    --card: 255 255 255;
+    --card-foreground: 15 23 42;
+
+    --popover: 255 255 255;
+    --popover-foreground: 15 23 42;
+
+    --muted: 241 245 249;
+    --muted-foreground: 100 116 139;
+
+    --border: 226 232 240;
+    --input: 226 232 240;
+    --ring: 16 185 129;
+
+    /* Emerald primary */
+    --primary: 16 185 129;
+    --primary-foreground: 255 255 255;
+
+    /* Cyan accent */
+    --accent: 6 182 212;
+    --accent-foreground: 255 255 255;
+
+    --success: 34 197 94;
+    --success-foreground: 255 255 255;
+
+    --warning: 245 158 11;
+    --warning-foreground: 255 255 255;
+
+    --destructive: 239 68 68;
+    --destructive-foreground: 255 255 255;
+
+    /* Sidebar (light: pearl with subtle tint) */
+    --sidebar: 255 255 255;
+    --sidebar-foreground: 51 65 85;
+    --sidebar-accent: 236 253 245;
+    --sidebar-accent-foreground: 4 120 87;
+    --sidebar-border: 226 232 240;
   }
 
-  body {
-    @apply bg-gray-50 text-gray-900 antialiased;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  .dark {
+    /* Slate-900 base, deeper for that "Apex sleek" feel */
+    --background: 9 14 23;
+    --foreground: 226 232 240;
+
+    --card: 15 23 36;
+    --card-foreground: 226 232 240;
+
+    --popover: 15 23 36;
+    --popover-foreground: 226 232 240;
+
+    --muted: 22 32 48;
+    --muted-foreground: 148 163 184;
+
+    --border: 30 41 59;
+    --input: 30 41 59;
+    --ring: 52 211 153;
+
+    --primary: 52 211 153;
+    --primary-foreground: 6 39 28;
+
+    --accent: 34 211 238;
+    --accent-foreground: 6 39 60;
+
+    --success: 74 222 128;
+    --success-foreground: 5 46 22;
+
+    --warning: 251 191 36;
+    --warning-foreground: 69 26 3;
+
+    --destructive: 248 113 113;
+    --destructive-foreground: 67 11 11;
+
+    --sidebar: 11 18 28;
+    --sidebar-foreground: 203 213 225;
+    --sidebar-accent: 22 39 53;
+    --sidebar-accent-foreground: 110 231 183;
+    --sidebar-border: 26 36 53;
   }
 
   * {
-    @apply border-gray-200;
+    @apply border-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 }
 
 @layer components {
+  /* Buttons --------------------------------------------------------- */
+  .btn-base {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50;
+  }
+
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply btn-base h-10 px-4 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/95;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+    @apply btn-base h-10 px-4 bg-card text-foreground border border-border shadow-sm hover:bg-muted;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-lg bg-danger-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-danger-700 focus:outline-none focus:ring-2 focus:ring-danger-500 focus:ring-offset-2;
+    @apply btn-base h-10 px-4 bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-100;
+    @apply btn-base h-10 px-4 text-muted-foreground hover:bg-muted hover:text-foreground;
   }
 
+  .btn-outline {
+    @apply btn-base h-10 px-4 border border-border bg-transparent hover:bg-muted hover:text-foreground;
+  }
+
+  /* Card ------------------------------------------------------------ */
   .card {
-    @apply rounded-xl border border-gray-200 bg-white p-6 shadow-card;
+    @apply rounded-xl border border-border bg-card text-card-foreground p-6 shadow-card;
   }
 
+  .card-elevated {
+    @apply card shadow-elevated;
+  }
+
+  /* Inputs ---------------------------------------------------------- */
   .input {
-    @apply block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-sm transition-colors placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20;
+    @apply flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  textarea.input {
+    @apply min-h-[80px] py-2.5;
+  }
+
+  select.input {
+    @apply pr-8;
   }
 
   .label {
-    @apply block text-sm font-medium text-gray-700 mb-1.5;
+    @apply block text-sm font-medium text-foreground mb-1.5;
   }
 
+  /* Badges ---------------------------------------------------------- */
   .badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors;
   }
 
   .badge-success {
-    @apply badge bg-success-50 text-success-700;
+    @apply badge border-transparent bg-success/15 text-success;
   }
 
   .badge-warning {
-    @apply badge bg-warning-50 text-warning-700;
+    @apply badge border-transparent bg-warning/15 text-warning;
   }
 
   .badge-danger {
-    @apply badge bg-danger-50 text-danger-700;
+    @apply badge border-transparent bg-destructive/15 text-destructive;
   }
 
   .badge-info {
-    @apply badge bg-primary-50 text-primary-700;
+    @apply badge border-transparent bg-primary/15 text-primary;
+  }
+
+  .badge-accent {
+    @apply badge border-transparent bg-accent/15 text-accent;
   }
 
   .badge-neutral {
-    @apply badge bg-gray-100 text-gray-700;
+    @apply badge border-transparent bg-muted text-muted-foreground;
+  }
+
+  /* Surfaces -------------------------------------------------------- */
+  .surface {
+    @apply rounded-xl border border-border bg-card;
+  }
+
+  .surface-muted {
+    @apply rounded-xl bg-muted;
+  }
+
+  /* Brand ----------------------------------------------------------- */
+  .brand-mark {
+    @apply flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-glow;
+    background: linear-gradient(135deg, rgb(var(--primary)) 0%, rgb(var(--accent)) 100%);
+  }
+
+  .text-gradient-brand {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, rgb(var(--primary)) 0%, rgb(var(--accent)) 100%);
+  }
+
+  /* Skeleton -------------------------------------------------------- */
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-muted;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--card) / 0.6),
+      transparent
+    );
+  }
+
+  /* Avatar ---------------------------------------------------------- */
+  .avatar-fallback {
+    @apply flex items-center justify-center rounded-full bg-primary/15 font-semibold text-primary;
   }
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling ------------------------------------------------- */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -83,9 +236,17 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded-full;
+  background: rgb(var(--border));
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
+  background: rgb(var(--muted-foreground) / 0.4);
+}
+
+/* react-hot-toast: ensure dark mode legibility */
+[data-hot-toast] {
+  background: rgb(var(--popover)) !important;
+  color: rgb(var(--popover-foreground)) !important;
+  border: 1px solid rgb(var(--border)) !important;
 }

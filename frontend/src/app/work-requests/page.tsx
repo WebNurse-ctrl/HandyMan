@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { Plus } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityIndicator from '@/components/ui/PriorityIndicator';
 import Pagination from '@/components/ui/Pagination';
+import PageHeader from '@/components/ui/PageHeader';
+import FilterChips from '@/components/ui/FilterChips';
 import { apiGet } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { WorkRequest, PaginatedResponse } from '@/types';
@@ -18,7 +21,6 @@ export default function WorkRequestsPage() {
   const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
-  const [showNewForm, setShowNewForm] = useState(false);
 
   const { data, isLoading } = useQuery<PaginatedResponse<WorkRequest>>({
     queryKey: ['work-requests', page, statusFilter],
@@ -35,7 +37,7 @@ export default function WorkRequestsPage() {
       key: 'requestNumber',
       label: 'Nummer',
       render: (item: WorkRequest) => (
-        <span className="font-mono text-xs text-gray-500">
+        <span className="font-mono text-xs text-muted-foreground">
           {item.requestNumber}
         </span>
       ),
@@ -45,8 +47,8 @@ export default function WorkRequestsPage() {
       label: 'Titel',
       render: (item: WorkRequest) => (
         <div>
-          <p className="font-medium text-gray-900">{item.title}</p>
-          <p className="text-xs text-gray-500">{item.campus?.name}</p>
+          <p className="font-medium text-foreground">{item.title}</p>
+          <p className="text-xs text-muted-foreground">{item.campus?.name}</p>
         </div>
       ),
     },
@@ -54,7 +56,7 @@ export default function WorkRequestsPage() {
       key: 'requestedBy',
       label: 'Aanvrager',
       render: (item: WorkRequest) => (
-        <span className="text-gray-600">
+        <span className="text-muted-foreground">
           {item.requestedBy?.displayName}
         </span>
       ),
@@ -62,9 +64,7 @@ export default function WorkRequestsPage() {
     {
       key: 'priority',
       label: 'Prioriteit',
-      render: (item: WorkRequest) => (
-        <PriorityIndicator priority={item.priority} />
-      ),
+      render: (item: WorkRequest) => <PriorityIndicator priority={item.priority} />,
     },
     {
       key: 'status',
@@ -75,7 +75,7 @@ export default function WorkRequestsPage() {
       key: 'createdAt',
       label: 'Datum',
       render: (item: WorkRequest) => (
-        <span className="text-gray-500">{formatDateTime(item.createdAt)}</span>
+        <span className="text-muted-foreground">{formatDateTime(item.createdAt)}</span>
       ),
     },
   ];
@@ -91,48 +91,34 @@ export default function WorkRequestsPage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Werkaanvragen</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              {user?.role === 'MEDEWERKER'
-                ? 'Dien een aanvraag in of volg je bestaande aanvragen op'
-                : 'Beheer en verwerk alle werkaanvragen'}
-            </p>
-          </div>
-          <button
-            onClick={() => router.push('/work-requests/new')}
-            className="btn-primary gap-2"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Nieuwe aanvraag
-          </button>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2">
-          {statuses.map((s) => (
+        <PageHeader
+          title="Werkaanvragen"
+          description={
+            user?.role === 'MEDEWERKER'
+              ? 'Dien een aanvraag in of volg je bestaande aanvragen op'
+              : 'Beheer en verwerk alle werkaanvragen'
+          }
+          actions={
             <button
-              key={s.value}
-              onClick={() => {
-                setStatusFilter(s.value);
-                setPage(1);
-              }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                statusFilter === s.value
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              type="button"
+              onClick={() => router.push('/work-requests/new')}
+              className="btn-primary"
             >
-              {s.label}
+              <Plus className="h-4 w-4" />
+              Nieuwe aanvraag
             </button>
-          ))}
-        </div>
+          }
+        />
 
-        {/* Table */}
+        <FilterChips
+          options={statuses}
+          value={statusFilter}
+          onChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        />
+
         <DataTable
           columns={columns}
           data={data?.data || []}
@@ -141,7 +127,6 @@ export default function WorkRequestsPage() {
           emptyMessage="Geen werkaanvragen gevonden"
         />
 
-        {/* Pagination */}
         {data?.meta && (
           <Pagination
             page={data.meta.page}

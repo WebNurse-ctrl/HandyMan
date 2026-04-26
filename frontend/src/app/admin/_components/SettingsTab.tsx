@@ -12,7 +12,10 @@ interface Setting {
   description?: string | null;
 }
 
-const LABELS: Record<string, { label: string; type: 'text' | 'number' | 'boolean' | 'select'; options?: string[] }> = {
+const LABELS: Record<
+  string,
+  { label: string; type: 'text' | 'number' | 'boolean' | 'select'; options?: string[] }
+> = {
   organization_name: { label: 'Organisatienaam', type: 'text' },
   support_email: { label: 'Support e-mailadres', type: 'text' },
   small_purchase_threshold: {
@@ -74,23 +77,23 @@ export default function SettingsTab() {
   };
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-gray-500">Laden...</div>;
+    return <div className="p-6 text-sm text-muted-foreground">Laden...</div>;
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <h2 className="text-sm font-semibold text-gray-900">
+      <div className="surface overflow-hidden">
+        <div className="border-b border-border px-6 py-4">
+          <h2 className="text-sm font-semibold text-foreground">
             Systeeminstellingen
           </h2>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Pas de algemene instellingen aan die van toepassing zijn op de hele
             applicatie.
           </p>
         </div>
 
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-border">
           {settings.map((setting) => {
             const meta = LABELS[setting.key] || { label: setting.key, type: 'text' };
             return (
@@ -99,11 +102,11 @@ export default function SettingsTab() {
                 className="grid gap-4 px-6 py-4 md:grid-cols-[1fr_320px] md:items-center"
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-foreground">
                     {meta.label}
                   </p>
                   {setting.description && (
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {setting.description}
                     </p>
                   )}
@@ -112,16 +115,14 @@ export default function SettingsTab() {
                   setting={setting}
                   meta={meta}
                   value={values[setting.key] ?? ''}
-                  onChange={(v) =>
-                    setValues({ ...values, [setting.key]: v })
-                  }
+                  onChange={(v) => setValues({ ...values, [setting.key]: v })}
                 />
               </div>
             );
           })}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/40 px-6 py-4">
           <button
             type="button"
             onClick={handleSave}
@@ -143,22 +144,34 @@ function SettingInput({
   onChange,
 }: {
   setting: Setting;
-  meta: { label: string; type: 'text' | 'number' | 'boolean' | 'select'; options?: string[] };
+  meta: {
+    label: string;
+    type: 'text' | 'number' | 'boolean' | 'select';
+    options?: string[];
+  };
   value: string;
   onChange: (v: string) => void;
 }) {
   if (meta.type === 'boolean') {
+    const enabled = value === 'true';
     return (
-      <label className="inline-flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={value === 'true'}
-          onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
-          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-        />
-        <span className="text-sm text-gray-700">
-          {value === 'true' ? 'Aan' : 'Uit'}
-        </span>
+      <label className="inline-flex cursor-pointer items-center gap-3">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => onChange(enabled ? 'false' : 'true')}
+          className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+            enabled ? 'bg-primary' : 'bg-muted'
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-card shadow-sm ring-0 transition duration-200 ${
+              enabled ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
+        <span className="text-sm text-muted-foreground">{enabled ? 'Aan' : 'Uit'}</span>
       </label>
     );
   }

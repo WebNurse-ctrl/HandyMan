@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 interface Room {
   id: string;
@@ -115,45 +117,64 @@ export default function CampusesTab() {
     <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">Campussen</h2>
+          <h2 className="text-sm font-semibold text-foreground">Campussen</h2>
           <button
+            type="button"
             onClick={() => {
               setShowNew(true);
               setSelectedId(null);
             }}
-            className="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700"
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
           >
-            + Nieuw
+            <Plus className="h-3.5 w-3.5" />
+            Nieuw
           </button>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="surface overflow-hidden">
           {isLoading ? (
-            <div className="p-4 text-sm text-gray-500">Laden...</div>
+            <div className="p-4 text-sm text-muted-foreground">Laden...</div>
           ) : campuses.length === 0 ? (
-            <div className="p-4 text-sm text-gray-500">Nog geen campussen</div>
+            <div className="p-4 text-sm text-muted-foreground">Nog geen campussen</div>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-border">
               {campuses.map((c) => (
                 <li key={c.id}>
                   <button
+                    type="button"
                     onClick={() => {
                       setSelectedId(c.id);
                       setShowNew(false);
                     }}
-                    className={`w-full px-4 py-3 text-left transition-colors ${
+                    className={cn(
+                      'flex w-full items-center gap-2 px-4 py-3 text-left transition-colors',
                       selectedId === c.id
-                        ? 'bg-primary-50'
-                        : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    <p className="font-medium text-gray-900">{c.name}</p>
-                    <p className="text-xs text-gray-500">{c.code}</p>
-                    {c._count && (
-                      <p className="mt-1 text-xs text-gray-400">
-                        {c._count.buildings} gebouwen · {c._count.departments} afdelingen
-                      </p>
+                        ? 'bg-primary/10'
+                        : 'hover:bg-muted',
                     )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          'truncate font-medium',
+                          selectedId === c.id ? 'text-primary' : 'text-foreground',
+                        )}
+                      >
+                        {c.name}
+                      </p>
+                      <p className="font-mono text-xs text-muted-foreground">{c.code}</p>
+                      {c._count && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {c._count.buildings} gebouwen · {c._count.departments} afdelingen
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight
+                      className={cn(
+                        'h-4 w-4 flex-shrink-0',
+                        selectedId === c.id ? 'text-primary' : 'text-muted-foreground/50',
+                      )}
+                    />
                   </button>
                 </li>
               ))}
@@ -170,8 +191,8 @@ export default function CampusesTab() {
             isPending={createCampus.isPending}
           />
         ) : selectedId && detailLoading ? (
-          <div className="flex h-64 items-center justify-center rounded-xl border border-gray-200 bg-white">
-            <p className="text-sm text-gray-500">Laden...</p>
+          <div className="flex h-64 items-center justify-center surface">
+            <p className="text-sm text-muted-foreground">Laden...</p>
           </div>
         ) : selectedId && detailError ? (
           <DetailErrorPanel error={detailError} />
@@ -192,8 +213,8 @@ export default function CampusesTab() {
             isDeleting={deleteCampus.isPending}
           />
         ) : (
-          <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white">
-            <p className="text-sm text-gray-500">
+          <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-border bg-card/50">
+            <p className="text-sm text-muted-foreground">
               Selecteer een campus of maak een nieuwe aan.
             </p>
           </div>
@@ -213,17 +234,17 @@ function DetailErrorPanel({ error }: { error: unknown }) {
     err.response?.data?.message || err.message || 'Onbekende fout';
 
   return (
-    <div className="space-y-3 rounded-xl border border-danger-200 bg-danger-50 p-6">
-      <h3 className="text-base font-semibold text-danger-800">
+    <div className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/10 p-6">
+      <h3 className="text-base font-semibold text-destructive">
         Kon campusdetails niet laden
       </h3>
-      <p className="text-sm text-danger-700">
+      <p className="text-sm text-destructive/90">
         {status ? `HTTP ${status}: ` : ''}
         {message}
       </p>
-      <div className="rounded-lg bg-white p-3 text-xs text-gray-700">
+      <div className="rounded-lg bg-card p-3 text-xs text-foreground">
         <p className="mb-1 font-semibold">Meest voorkomende oorzaak</p>
-        <p>
+        <p className="text-muted-foreground">
           De database is niet bijgewerkt voor de nieuwste schema-wijzigingen
           (kolom <code className="font-mono">building_id</code> op{' '}
           <code className="font-mono">departments</code>, of de locatie-kolommen
@@ -257,9 +278,9 @@ function NewCampusForm({
         e.preventDefault();
         onSubmit(form);
       }}
-      className="space-y-4 rounded-xl border border-gray-200 bg-white p-6"
+      className="card space-y-4"
     >
-      <h3 className="text-lg font-semibold text-gray-900">Nieuwe campus</h3>
+      <h3 className="text-lg font-semibold text-foreground">Nieuwe campus</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="label">Naam *</label>
@@ -333,113 +354,109 @@ function CampusDetailPanel({
   const directDeptCount = campus.departments.length;
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 px-6">
-          <nav className="flex gap-6">
+    <div className="surface overflow-hidden">
+      <div className="border-b border-border px-6">
+        <nav className="flex gap-1">
+          {[
+            { id: 'info' as const, label: 'Gegevens' },
+            {
+              id: 'buildings' as const,
+              label: `Gebouwen (${campus.buildings.length})`,
+            },
+            {
+              id: 'departments' as const,
+              label: `Afdelingen direct (${directDeptCount})`,
+            },
+          ].map((t) => (
             <button
-              onClick={() => setTab('info')}
-              className={`-mb-px border-b-2 py-3 text-sm font-medium ${
-                tab === 'info'
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                'relative px-3 py-3 text-sm font-medium transition-colors',
+                tab === t.id
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
             >
-              Gegevens
+              {t.label}
+              {tab === t.id && (
+                <span className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-primary" />
+              )}
             </button>
-            <button
-              onClick={() => setTab('buildings')}
-              className={`-mb-px border-b-2 py-3 text-sm font-medium ${
-                tab === 'buildings'
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Gebouwen ({campus.buildings.length})
-            </button>
-            <button
-              onClick={() => setTab('departments')}
-              className={`-mb-px border-b-2 py-3 text-sm font-medium ${
-                tab === 'departments'
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Afdelingen (direct) ({directDeptCount})
-            </button>
-          </nav>
-        </div>
+          ))}
+        </nav>
+      </div>
 
-        <div className="p-6">
-          {tab === 'info' && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                onSave(form);
-              }}
-              className="space-y-4"
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="label">Naam</label>
-                  <input
-                    className="input"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Code</label>
-                  <input
-                    className="input"
-                    value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value })}
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="label">Adres</label>
-                  <input
-                    className="input"
-                    value={form.address}
-                    onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Stad</label>
-                  <input
-                    className="input"
-                    value={form.city}
-                    onChange={(e) => setForm({ ...form, city: e.target.value })}
-                  />
-                </div>
+      <div className="p-6">
+        {tab === 'info' && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSave(form);
+            }}
+            className="space-y-4"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Naam</label>
+                <input
+                  className="input"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
               </div>
-              <div className="flex items-center justify-between pt-2">
-                <button type="submit" disabled={isSaving} className="btn-primary">
-                  {isSaving ? 'Bezig...' : 'Opslaan'}
-                </button>
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  disabled={isDeleting}
-                  className="btn-danger"
-                >
-                  {isDeleting ? 'Bezig...' : 'Campus verwijderen'}
-                </button>
+              <div>
+                <label className="label">Code</label>
+                <input
+                  className="input"
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                />
               </div>
-            </form>
-          )}
+              <div className="sm:col-span-2">
+                <label className="label">Adres</label>
+                <input
+                  className="input"
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Stad</label>
+                <input
+                  className="input"
+                  value={form.city}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-t border-border pt-4">
+              <button type="submit" disabled={isSaving} className="btn-primary">
+                {isSaving ? 'Bezig...' : 'Opslaan'}
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={isDeleting}
+                className="btn-danger"
+              >
+                {isDeleting ? 'Bezig...' : 'Campus verwijderen'}
+              </button>
+            </div>
+          </form>
+        )}
 
-          {tab === 'buildings' && <BuildingsSection campus={campus} />}
+        {tab === 'buildings' && <BuildingsSection campus={campus} />}
 
-          {tab === 'departments' && (
-            <DepartmentsSection
-              campusId={campus.id}
-              departments={campus.departments}
-              scope="campus"
-              emptyText="Deze campus heeft nog geen afdelingen die rechtstreeks onder de campus vallen. Voeg er een toe als deze campus niet uit aparte gebouwen bestaat."
-            />
-          )}
-        </div>
+        {tab === 'departments' && (
+          <DepartmentsSection
+            campusId={campus.id}
+            departments={campus.departments}
+            scope="campus"
+            emptyText="Deze campus heeft nog geen afdelingen die rechtstreeks onder de campus vallen. Voeg er een toe als deze campus niet uit aparte gebouwen bestaat."
+          />
+        )}
       </div>
     </div>
   );
@@ -502,12 +519,13 @@ function BuildingsSection({ campus }: { campus: CampusDetail }) {
           disabled={createBuilding.isPending}
           className="btn-primary whitespace-nowrap"
         >
-          + Toevoegen
+          <Plus className="h-4 w-4" />
+          Toevoegen
         </button>
       </form>
 
       {campus.buildings.length === 0 ? (
-        <p className="text-sm text-gray-500">Nog geen gebouwen gedefinieerd.</p>
+        <p className="text-sm text-muted-foreground">Nog geen gebouwen gedefinieerd.</p>
       ) : (
         <div className="space-y-3">
           {campus.buildings.map((b) => (
@@ -515,9 +533,7 @@ function BuildingsSection({ campus }: { campus: CampusDetail }) {
               key={b.id}
               building={b}
               expanded={expandedId === b.id}
-              onToggle={() =>
-                setExpandedId(expandedId === b.id ? null : b.id)
-              }
+              onToggle={() => setExpandedId(expandedId === b.id ? null : b.id)}
               onDelete={() => {
                 if (
                   confirm(
@@ -547,26 +563,22 @@ function BuildingRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200">
-      <div className="flex items-center justify-between px-4 py-3">
+    <div className="overflow-hidden rounded-lg border border-border">
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
         <button
+          type="button"
           onClick={onToggle}
           className="flex flex-1 items-center gap-2 text-left"
         >
-          <svg
-            className={`h-4 w-4 text-gray-400 transition-transform ${
-              expanded ? 'rotate-90' : ''
-            }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+          <ChevronRight
+            className={cn(
+              'h-4 w-4 text-muted-foreground transition-transform',
+              expanded && 'rotate-90',
+            )}
+          />
           <div>
-            <p className="font-medium text-gray-900">{building.name}</p>
-            <p className="text-xs text-gray-500">
+            <p className="font-medium text-foreground">{building.name}</p>
+            <p className="text-xs text-muted-foreground">
               {building.code && <span className="mr-2">Code: {building.code}</span>}
               {building.departments.length}{' '}
               {building.departments.length === 1 ? 'afdeling' : 'afdelingen'}
@@ -574,15 +586,17 @@ function BuildingRow({
           </div>
         </button>
         <button
+          type="button"
           onClick={onDelete}
-          className="text-sm font-medium text-danger-600 hover:text-danger-700"
+          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-sm font-medium text-destructive hover:bg-destructive/10"
         >
+          <Trash2 className="h-3.5 w-3.5" />
           Verwijder
         </button>
       </div>
 
       {expanded && (
-        <div className="border-t border-gray-100 bg-gray-50 px-4 py-4">
+        <div className="border-t border-border bg-muted/40 px-4 py-4">
           <DepartmentsSection
             buildingId={building.id}
             departments={building.departments}
@@ -668,12 +682,13 @@ function DepartmentsSection({
           disabled={createDept.isPending}
           className="btn-primary whitespace-nowrap"
         >
-          + Toevoegen
+          <Plus className="h-4 w-4" />
+          Toevoegen
         </button>
       </form>
 
       {departments.length === 0 ? (
-        <p className="text-sm text-gray-500">{emptyText}</p>
+        <p className="text-sm text-muted-foreground">{emptyText}</p>
       ) : (
         <div className="space-y-3">
           {departments.map((d) => (
@@ -731,41 +746,39 @@ function DepartmentRow({
   });
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="flex items-center justify-between px-4 py-3">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
           className="flex flex-1 items-center gap-2 text-left"
         >
-          <svg
-            className={`h-4 w-4 text-gray-400 transition-transform ${
-              expanded ? 'rotate-90' : ''
-            }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+          <ChevronRight
+            className={cn(
+              'h-4 w-4 text-muted-foreground transition-transform',
+              expanded && 'rotate-90',
+            )}
+          />
           <div>
-            <p className="font-medium text-gray-900">{department.name}</p>
-            <p className="text-xs text-gray-500">
+            <p className="font-medium text-foreground">{department.name}</p>
+            <p className="text-xs text-muted-foreground">
               {department.rooms.length}{' '}
               {department.rooms.length === 1 ? 'kamer' : 'kamers'}
             </p>
           </div>
         </button>
         <button
+          type="button"
           onClick={onDelete}
-          className="text-sm font-medium text-danger-600 hover:text-danger-700"
+          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-sm font-medium text-destructive hover:bg-destructive/10"
         >
+          <Trash2 className="h-3.5 w-3.5" />
           Verwijder
         </button>
       </div>
 
       {expanded && (
-        <div className="space-y-3 border-t border-gray-100 bg-gray-50 px-4 py-3">
+        <div className="space-y-3 border-t border-border bg-muted/40 px-4 py-3">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -777,31 +790,28 @@ function DepartmentRow({
               placeholder="Naam kamer"
               className="input"
               value={roomForm.name}
-              onChange={(e) =>
-                setRoomForm({ ...roomForm, name: e.target.value })
-              }
+              onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })}
             />
             <input
               placeholder="Nummer"
               className="input"
               value={roomForm.number}
-              onChange={(e) =>
-                setRoomForm({ ...roomForm, number: e.target.value })
-              }
+              onChange={(e) => setRoomForm({ ...roomForm, number: e.target.value })}
             />
             <button
               type="submit"
               disabled={createRoom.isPending || (!roomForm.name && !roomForm.number)}
               className="btn-primary whitespace-nowrap"
             >
-              + Kamer
+              <Plus className="h-4 w-4" />
+              Kamer
             </button>
           </form>
 
           {department.rooms.length === 0 ? (
-            <p className="text-xs text-gray-500">Nog geen kamers.</p>
+            <p className="text-xs text-muted-foreground">Nog geen kamers.</p>
           ) : (
-            <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+            <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
               {department.rooms.map((r) => (
                 <li
                   key={r.id}
@@ -809,20 +819,22 @@ function DepartmentRow({
                 >
                   <div>
                     {r.number && (
-                      <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">
+                      <span className="mr-2 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
                         {r.number}
                       </span>
                     )}
-                    <span className="text-gray-900">{r.name || '-'}</span>
+                    <span className="text-foreground">{r.name || '—'}</span>
                   </div>
                   <button
+                    type="button"
                     onClick={() => {
                       if (confirm('Kamer verwijderen?')) {
                         deleteRoom.mutate(r.id);
                       }
                     }}
-                    className="text-xs font-medium text-danger-600 hover:text-danger-700"
+                    className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
                   >
+                    <Trash2 className="h-3 w-3" />
                     Verwijder
                   </button>
                 </li>

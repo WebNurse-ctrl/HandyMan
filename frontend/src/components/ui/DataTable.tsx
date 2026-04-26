@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import Skeleton from './Skeleton';
 
 interface Column<T> {
   key: string;
@@ -26,42 +27,46 @@ export default function DataTable<T extends { id: string }>({
 }: DataTableProps<T>) {
   if (isLoading) {
     return (
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <div className="animate-pulse">
-          <div className="border-b border-gray-200 bg-gray-50 px-6 py-3">
-            <div className="h-4 w-full rounded bg-gray-200" />
+      <div className="surface overflow-hidden">
+        <div className="border-b border-border bg-muted/40 px-6 py-3">
+          <div className="grid grid-cols-6 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-4 w-full" />
+            ))}
           </div>
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="border-b border-gray-100 px-6 py-4">
-              <div className="h-4 w-full rounded bg-gray-100" />
-            </div>
-          ))}
         </div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="border-b border-border px-6 py-4 last:border-b-0">
+            <div className="grid grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, j) => (
+                <Skeleton key={j} className="h-4 w-full" />
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (data.length === 0) {
     return (
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <div className="flex items-center justify-center py-12">
-          <p className="text-sm text-gray-500">{emptyMessage}</p>
-        </div>
+      <div className="surface flex items-center justify-center py-16">
+        <p className="text-sm text-muted-foreground">{emptyMessage}</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <div className="surface overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="min-w-full">
           <thead>
-            <tr className="bg-gray-50">
+            <tr className="border-b border-border bg-muted/40">
               {columns.map((col) => (
                 <th
                   key={col.key}
                   className={cn(
-                    'px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500',
+                    'px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground',
                     col.className,
                   )}
                 >
@@ -70,29 +75,28 @@ export default function DataTable<T extends { id: string }>({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {data.map((item) => (
+          <tbody>
+            {data.map((item, index) => (
               <tr
                 key={item.id}
                 onClick={() => onRowClick?.(item)}
                 className={cn(
                   'transition-colors',
-                  onRowClick
-                    ? 'cursor-pointer hover:bg-gray-50'
-                    : '',
+                  index !== data.length - 1 && 'border-b border-border',
+                  onRowClick ? 'cursor-pointer hover:bg-muted/40' : '',
                 )}
               >
                 {columns.map((col) => (
                   <td
                     key={col.key}
                     className={cn(
-                      'whitespace-nowrap px-6 py-4 text-sm',
+                      'whitespace-nowrap px-6 py-3.5 text-sm text-foreground',
                       col.className,
                     )}
                   >
                     {col.render
                       ? col.render(item)
-                      : String((item as any)[col.key] ?? '')}
+                      : String((item as Record<string, unknown>)[col.key] ?? '')}
                   </td>
                 ))}
               </tr>
