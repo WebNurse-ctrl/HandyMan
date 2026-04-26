@@ -54,8 +54,8 @@ function liveDurationMinutes(startedAt: string): number {
   );
 }
 
-const ICON_PROPS = {
-  className: 'h-3.5 w-3.5 text-gray-400',
+const ICON_BASE = {
+  className: 'h-3.5 w-3.5',
   fill: 'none' as const,
   viewBox: '0 0 24 24',
   strokeWidth: 1.8,
@@ -64,7 +64,7 @@ const ICON_PROPS = {
 
 const Icons = {
   user: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_BASE} className="h-3.5 w-3.5 text-primary-500">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -73,7 +73,7 @@ const Icons = {
     </svg>
   ),
   campus: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_BASE} className="h-3.5 w-3.5 text-indigo-500">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -82,7 +82,7 @@ const Icons = {
     </svg>
   ),
   building: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_BASE} className="h-3.5 w-3.5 text-amber-500">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -91,7 +91,7 @@ const Icons = {
     </svg>
   ),
   department: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_BASE} className="h-3.5 w-3.5 text-purple-500">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -100,7 +100,7 @@ const Icons = {
     </svg>
   ),
   room: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_BASE} className="h-3.5 w-3.5 text-emerald-500">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -109,7 +109,7 @@ const Icons = {
     </svg>
   ),
   category: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_BASE} className="h-3.5 w-3.5 text-rose-500">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -118,7 +118,7 @@ const Icons = {
     </svg>
   ),
   clock: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_BASE} className="h-3.5 w-3.5 text-sky-500">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -127,7 +127,7 @@ const Icons = {
     </svg>
   ),
   check: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_BASE} className="h-3.5 w-3.5 text-success-500">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -427,91 +427,6 @@ export default function WorkRequestDetailPage() {
               )}
             </div>
 
-            {/* Progress */}
-            <div className="card">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-                  Werkvooruitgang
-                </h2>
-                <span className="text-2xl font-bold text-gray-900">
-                  {progressDraft}%
-                </span>
-              </div>
-
-              <div className="mt-4">
-                <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
-                  <div
-                    className={`h-full rounded-full transition-all ${progressColor(
-                      progressDraft,
-                    )}`}
-                    style={{ width: `${progressDraft}%` }}
-                  />
-                </div>
-
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={20}
-                  value={progressDraft}
-                  disabled={!canEdit || progressMutation.isPending}
-                  onChange={(e) =>
-                    setProgressDraft(snapToStep(Number(e.target.value)))
-                  }
-                  className="mt-4 w-full cursor-pointer accent-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-                />
-
-                <div className="mt-2 flex justify-between text-xs text-gray-500">
-                  {PROGRESS_STEPS.map((step) => (
-                    <button
-                      key={step}
-                      type="button"
-                      disabled={!canEdit || progressMutation.isPending}
-                      onClick={() => setProgressDraft(step)}
-                      className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
-                        progressDraft === step
-                          ? 'bg-primary-100 text-primary-700'
-                          : 'hover:bg-gray-100'
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
-                    >
-                      {step}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {canEdit ? (
-                <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
-                  {progressDirty && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setProgressDraft(workRequest.progress ?? 0)
-                      }
-                      disabled={progressMutation.isPending}
-                      className="btn-ghost"
-                    >
-                      Annuleren
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={!progressDirty || progressMutation.isPending}
-                    onClick={() => progressMutation.mutate(progressDraft)}
-                    className="btn-primary"
-                  >
-                    {progressMutation.isPending
-                      ? 'Bezig met opslaan...'
-                      : 'Voortgang opslaan'}
-                  </button>
-                </div>
-              ) : (
-                <p className="mt-4 text-xs text-gray-500">
-                  Alleen de technische dienst kan de voortgang bijwerken.
-                </p>
-              )}
-            </div>
-
             {/* Time registration */}
             <div className="card">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -743,6 +658,14 @@ export default function WorkRequestDetailPage() {
             </div>
           </div>
 
+          {/*
+           * NOTE: The "Werkvooruitgang" (progress) card MUST live in the
+           * side column, never in the main column, and uses a single
+           * indicator (a slider for editors, a static bar for read-only
+           * viewers). This was a deliberate UX decision — see HANDOVER.md
+           * §"Layout invarianten werkaanvraag detailpagina". Do not move
+           * it to the main column or duplicate the indicator.
+           */}
           {/* Side column */}
           <div className="space-y-6">
             {/* Priority */}
@@ -785,6 +708,95 @@ export default function WorkRequestDetailPage() {
                     Alleen de technische dienst kan de prioriteit aanpassen.
                   </p>
                 </div>
+              )}
+            </div>
+
+            {/* Progress — sidebar location is intentional, see comment above. */}
+            <div className="card">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                  Werkvooruitgang
+                </h2>
+                <span className="text-lg font-bold text-gray-900">
+                  {progressDraft}%
+                </span>
+              </div>
+
+              {canEdit ? (
+                <>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={20}
+                    value={progressDraft}
+                    disabled={progressMutation.isPending}
+                    onChange={(e) =>
+                      setProgressDraft(snapToStep(Number(e.target.value)))
+                    }
+                    className="mt-4 w-full cursor-pointer accent-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+
+                  <div className="mt-2 flex justify-between text-xs text-gray-500">
+                    {PROGRESS_STEPS.map((step) => (
+                      <button
+                        key={step}
+                        type="button"
+                        disabled={progressMutation.isPending}
+                        onClick={() => setProgressDraft(step)}
+                        className={cn(
+                          'rounded px-1 py-0.5 font-medium transition-colors',
+                          progressDraft === step
+                            ? 'bg-primary-100 text-primary-700'
+                            : 'hover:bg-gray-100',
+                          'disabled:cursor-not-allowed disabled:opacity-60',
+                        )}
+                      >
+                        {step}%
+                      </button>
+                    ))}
+                  </div>
+
+                  {progressDirty && (
+                    <div className="mt-4 flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProgressDraft(workRequest.progress ?? 0)
+                        }
+                        disabled={progressMutation.isPending}
+                        className="btn-ghost text-xs"
+                      >
+                        Annuleren
+                      </button>
+                      <button
+                        type="button"
+                        disabled={progressMutation.isPending}
+                        onClick={() => progressMutation.mutate(progressDraft)}
+                        className="btn-primary text-xs"
+                      >
+                        {progressMutation.isPending
+                          ? 'Opslaan...'
+                          : 'Opslaan'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all',
+                        progressColor(workRequest.progress ?? 0),
+                      )}
+                      style={{ width: `${workRequest.progress ?? 0}%` }}
+                    />
+                  </div>
+                  <p className="mt-3 text-xs text-gray-500">
+                    Alleen de technische dienst kan de voortgang bijwerken.
+                  </p>
+                </>
               )}
             </div>
 

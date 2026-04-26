@@ -269,18 +269,36 @@ De waardes worden verstuurd als `buildingId`, `departmentId`, `roomId` naar `/ap
 
 ### Werkaanvraag detailpagina (v1.4)
 
-Route: `/work-requests/[id]` — opgebouwd uit drie kaarten:
+Route: `/work-requests/[id]` — opgebouwd uit een hoofdkolom (2/3) en een sidebar (1/3).
+
+**Hoofdkolom (lg:col-span-2):**
 
 1. **Omschrijving** met optioneel een weigeringsreden.
-2. **Werkvooruitgang**:
-   - Range-input `min=0 max=100 step=20` — de slider rast vast op de stappen 0, 20, 40, 60, 80, 100.
-   - Klikbare stap-knoppen onder de balk voor directe selectie.
-   - Kleur van de balk: grijs (0) → oranje (≥20) → blauw (≥60) → groen (=100).
-   - Rol-gating: alleen niet-MEDEWERKER rollen kunnen de waarde bijwerken. De server verifieert geen rol (conform de huidige RBAC-status) — gating is enkel UI-niveau.
-   - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
+2. **Tijdsregistratie** (v1.5): start/stop timer + tabel met alle registraties en totale duur.
 3. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
 
-Bijkomende side-panel met metadata (aanvrager, campus, locatiehiërarchie, categorie, timestamps, `resolvedAt`).
+**Sidebar (1/3):**
+
+1. **Prioriteit**: 4 gekleurde knoppen (Laag/Gemiddeld/Hoog/Dringend) — bewerkbaar voor niet-MEDEWERKER, anders een gekleurde badge.
+2. **Werkvooruitgang** (zie Layout invarianten hieronder).
+3. **Details**: aanvrager, campus, gebouw, afdeling, kamer, categorie, timestamps, `resolvedAt` — elk met een gekleurd inline icoon.
+
+**Werkvooruitgang-kaart:**
+- Range-input `min=0 max=100 step=20` — de slider rast vast op de stappen 0, 20, 40, 60, 80, 100.
+- Klikbare stap-knoppen onder de slider voor directe selectie.
+- Kleur van de balk (read-only weergave): grijs (0) → oranje (≥20) → blauw (≥60) → groen (=100).
+- Rol-gating: alleen niet-MEDEWERKER rollen kunnen de waarde bijwerken. De server verifieert geen rol (conform de huidige RBAC-status) — gating is enkel UI-niveau.
+- Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
+
+### Layout invarianten werkaanvraag detailpagina
+
+> **BELANGRIJK voor toekomstige Claude-sessies / contributors.**
+>
+> 1. **De "Werkvooruitgang"-kaart staat in de sidebar (rechterkolom), nooit in de hoofdkolom.** Eerdere branches hebben dit al meermaals gefixed (`cbe92a2`, `e3f31e4`, deze branch) maar die fixes waren niet gemerged naar `main`. Verplaats de kaart **niet** naar de hoofdkolom — ook niet "voor de overzichtelijkheid" of bij een refactor.
+> 2. **Eén voortgangsindicator, geen twee.** Voor canEdit-gebruikers: enkel de range-slider (geen extra gevulde balk erboven). Voor read-only gebruikers: enkel de gevulde balk (geen disabled slider). Het percentage staat steeds rechts bovenin de kaart.
+> 3. **Iconen in de Details-sidebar zijn gekleurd**, niet monotoon grijs. Kleurkeuze per icoon: aanvrager (primary), campus (indigo), gebouw (amber), afdeling (purple), kamer (emerald), categorie (rose), klok (sky), check (success).
+>
+> Deze keuzes zijn UX-decisions van de eindgebruiker. Bij twijfel over een refactor: vraag eerst of houd je strikt aan deze invarianten.
 
 ### Cache-gedrag (v1.4)
 
