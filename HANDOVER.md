@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.4
+# HandyMan - Project Handover Document v1.4.1
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -16,6 +16,7 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 - **Actieve hoofdbranch**: `main` — bevat v1.0 → v1.4 (incl. v1.3 admin beheer + v1.4 detailpagina)
 - **v1.3 feature branch**: `claude/admin-campus-management-U7E1t` (gemerged in main)
 - **v1.4 feature branch**: `claude/job-request-details-ZBKGT` (gemerged in main)
+- **v1.4.1 fix branch**: `claude/fix-priority-pills-hEijx` (UI-fixes: prioriteit-pills + voortgangskaart in zijkolom, nog niet gemerged in main)
 
 ## Tech Stack
 
@@ -232,8 +233,8 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | `/login` | login/page.tsx | Microsoft SSO login |
 | `/dashboard` | dashboard/page.tsx | KPI kaarten, trends, werklast, budgetten |
 | `/work-requests` | work-requests/page.tsx | Tabel met filters |
-| `/work-requests/new` | work-requests/new/page.tsx | **v1.3** Formulier met cascading locatie selects: Campus → (Gebouw) → Afdeling → Kamer |
-| `/work-requests/[id]` | work-requests/[id]/page.tsx | **v1.4** Detailpagina: meta (aanvrager, campus/gebouw/afd./kamer, categorie, timestamps), voortgangsslider 0/20/40/60/80/100 % met auto-statusovergang, feedback-thread (Comments). Slider disabled voor MEDEWERKER. |
+| `/work-requests/new` | work-requests/new/page.tsx | **v1.3** Formulier met cascading locatie selects: Campus → (Gebouw) → Afdeling → Kamer. **v1.4.1**: prioriteit-pills (Laag/Normaal/Hoog/Urgent) staan op één lijn (`flex flex-nowrap`) en dragen altijd hun eigen kleur (grijs/blauw/oranje/rood), ook als ze niet geselecteerd zijn. |
+| `/work-requests/[id]` | work-requests/[id]/page.tsx | **v1.4** Detailpagina met hoofdkolom (omschrijving + feedback) en zijkolom (Details + Werkvooruitgang). Voortgangsslider 0/20/40/60/80/100 % met auto-statusovergang. Slider disabled voor MEDEWERKER. **v1.4.1**: de Werkvooruitgang-kaart staat onder de Details-kaart in de zijkolom (voorheen domineerde hij de hoofdkolom); de dubbele visuele progressbar boven de slider is verwijderd. |
 | `/tasks` | tasks/page.tsx | Takenlijst |
 | `/projects` | projects/page.tsx | Projectkaarten |
 | `/purchases` | purchases/page.tsx | Aankopentabel |
@@ -267,20 +268,24 @@ Cascading selects in `/work-requests/new`:
 
 De waardes worden verstuurd als `buildingId`, `departmentId`, `roomId` naar `/api/work-requests` POST.
 
-### Werkaanvraag detailpagina (v1.4)
+### Werkaanvraag detailpagina (v1.4 / v1.4.1)
 
-Route: `/work-requests/[id]` — opgebouwd uit drie kaarten:
+Route: `/work-requests/[id]` — twee-kolomslayout (`lg:grid-cols-3`):
+
+**Hoofdkolom** (`lg:col-span-2`):
 
 1. **Omschrijving** met optioneel een weigeringsreden.
-2. **Werkvooruitgang**:
+2. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
+
+**Zijkolom**:
+
+1. **Details**: metadata (aanvrager, campus, locatiehiërarchie, categorie, timestamps, `resolvedAt`).
+2. **Werkvooruitgang** (v1.4.1: verplaatst van hoofdkolom naar zijkolom, onder Details):
    - Range-input `min=0 max=100 step=20` — de slider rast vast op de stappen 0, 20, 40, 60, 80, 100.
-   - Klikbare stap-knoppen onder de balk voor directe selectie.
-   - Kleur van de balk: grijs (0) → oranje (≥20) → blauw (≥60) → groen (=100).
+   - Klikbare stap-knoppen onder de slider voor directe selectie.
+   - **v1.4.1**: de aparte gekleurde voortgangsbalk boven de slider is weggehaald (visueel duplicaat van de slider). De `progressColor` helper is mee verwijderd.
    - Rol-gating: alleen niet-MEDEWERKER rollen kunnen de waarde bijwerken. De server verifieert geen rol (conform de huidige RBAC-status) — gating is enkel UI-niveau.
    - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
-3. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
-
-Bijkomende side-panel met metadata (aanvrager, campus, locatiehiërarchie, categorie, timestamps, `resolvedAt`).
 
 ### Cache-gedrag (v1.4)
 
@@ -437,6 +442,14 @@ END $$;
 ```
 
 Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elke deploy automatisch gesynchroniseerd. `prisma db push` zonder `--accept-data-loss` faalt bij destructieve wijzigingen (bewust) zodat je stille dataverlies voorkomt. Zorg dat `DIRECT_URL` in Vercel gedefinieerd is, want `prisma db push` vereist een directe connectie (poort 5432, niet de PgBouncer-pooler op 6543).
+
+## Wat is geïmplementeerd in v1.4.1 (UI-fixes bovenop v1.4)
+
+Branch: `claude/fix-priority-pills-hEijx` (commit `e3f31e4`).
+
+- **Prioriteit-pills op nieuwe werkaanvraag**: de 4 knoppen (Laag/Normaal/Hoog/Urgent) staan gegarandeerd op één lijn (`flex flex-nowrap` + `flex-1` per pill, `whitespace-nowrap` op de tekst) en dragen altijd hun eigen kleur — grijs/blauw/oranje/rood — ook in ongeselecteerde toestand. De geselecteerde pill krijgt een gekleurde ring + lichte achtergrondtint.
+- **Werkvooruitgang-kaart verplaatst**: van de hoofdkolom naar de zijkolom direct onder de Details-kaart, zodat de voortgangsslider de detailpagina niet meer domineert.
+- **Dubbele progressbar weg**: de gekleurde balk boven de slider toonde dezelfde waarde als de slider zelf (twee schuiven naast elkaar). De balk én de bijbehorende `progressColor`-helper zijn verwijderd; de slider zelf blijft de visuele voortgangsindicator.
 
 ## Wat is geïmplementeerd in v1.4
 
