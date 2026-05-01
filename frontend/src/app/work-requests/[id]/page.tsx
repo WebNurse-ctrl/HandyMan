@@ -48,6 +48,7 @@ const PROGRESS_STEPS = [0, 20, 40, 60, 80, 100] as const;
 
 const PICKUP_ROLES = ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'ADMIN', 'FACILITAIR_MANAGER'];
 const ADMIN_ROLES = ['ADMIN', 'FACILITAIR_MANAGER'];
+const ASSIGN_ROLES = ['ADMIN', 'FACILITAIR_MANAGER', 'DIENSTHOOFD'];
 
 function snapToStep(value: number): number {
   return PROGRESS_STEPS.reduce((prev, curr) =>
@@ -192,7 +193,7 @@ export default function WorkRequestDetailPage() {
   const canPickupNow =
     canPickup && !workRequest.assignedTo && workRequest.status === 'INGEDIEND';
   const canRelease = isAssignee || (isAdmin && !!workRequest.assignedTo);
-  const canForceAssign = isAdmin;
+  const canForceAssign = ASSIGN_ROLES.includes(userRole);
 
   return (
     <AppLayout>

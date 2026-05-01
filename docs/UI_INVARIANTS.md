@@ -68,8 +68,8 @@ het begin van elke sessie.
    - `Oppikken` — TD/DH/ADMIN/FM, alleen als status=`INGEDIEND` en
      niemand is toegewezen.
    - `Loslaten` — de huidige `assignedTo` zelf, of ADMIN/FM altijd.
-   - `Anders toewijzen` — alleen ADMIN/FM, opent een modal met de
-     technische staf.
+   - `Anders toewijzen` — DH/FM/ADMIN, opent een modal met de
+     technische staf (lijst uit `/api/users/technical-staff`).
 
 ### Waarom
 

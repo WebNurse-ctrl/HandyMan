@@ -69,6 +69,7 @@ export const ALL_ROLES: RoleSet = [
 
 export const ADMIN_ROLES: RoleSet = ['ADMIN', 'FACILITAIR_MANAGER'];
 export const INVITE_ROLES: RoleSet = ['ADMIN', 'FACILITAIR_MANAGER', 'DIENSTHOOFD'];
+export const ASSIGN_ROLES: RoleSet = ['ADMIN', 'FACILITAIR_MANAGER', 'DIENSTHOOFD'];
 export const PICKUP_ROLES: RoleSet = [
   'TECHNISCHE_DIENST',
   'DIENSTHOOFD',

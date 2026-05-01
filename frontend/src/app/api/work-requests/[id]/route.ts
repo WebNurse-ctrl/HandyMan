@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { ADMIN_ROLES, PICKUP_ROLES, requireAuth } from '@/lib/auth';
+import { ASSIGN_ROLES, PICKUP_ROLES, requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,9 +149,9 @@ export async function PATCH(
         }
       } else {
         // Force-assign to someone else
-        if (!isAdmin) {
+        if (!(ASSIGN_ROLES as readonly string[]).includes(user.role)) {
           return NextResponse.json(
-            { message: 'Alleen een beheerder kan iemand anders toewijzen.' },
+            { message: 'Alleen Diensthoofd, Facilitair manager of Administrator kan iemand anders toewijzen.' },
             { status: 403 },
           );
         }

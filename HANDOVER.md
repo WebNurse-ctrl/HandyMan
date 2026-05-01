@@ -232,7 +232,8 @@ Gebruikers.
 | Alle aanvragen zien (binnen scope) | | x | x | x | x |
 | Werkaanvraag oppikken / loslaten (v1.6) | | x | x | x | x |
 | Voortgang bewerken (alleen eigenaar, v1.6) | | x | x | x | x |
-| Anders toewijzen (force-assign, v1.6) | | | | x | x |
+| Anders toewijzen (force-assign, v1.6) | | | x | x | x |
+| Loslaten van iemand anders (v1.6) | | | | x | x |
 | Triage & dispatching | | x | x | x | x |
 | Taken beheren | | x | x | x | x |
 | Projecten aanmaken | | | x | x | x |
@@ -697,7 +698,7 @@ Details, maar heeft géén bewerkrecht meer op de voortgang.
 |---|---|---|---|
 | **Claim (zelf)** | `{ assignedToId: <currentUser.id> }` | TD/DH/ADMIN/FM, alleen als `status === 'INGEDIEND'` en geen huidige eigenaar | Status `INGEDIEND` → `IN_BEHANDELING` |
 | **Release (zelf)** | `{ assignedToId: null }` | huidige `assignedTo` of ADMIN/FM | — |
-| **Force-assign** | `{ assignedToId: <other.id> }` | alleen ADMIN/FM; doelgebruiker moet TD/DH/ADMIN/FM zijn | Status `INGEDIEND` → `IN_BEHANDELING` |
+| **Force-assign** | `{ assignedToId: <other.id> }` | DH/FM/ADMIN; doelgebruiker moet TD/DH/ADMIN/FM zijn | Status `INGEDIEND` → `IN_BEHANDELING` |
 
 `PATCH` met `progress` is nu **server-side ge-gate**: alleen
 `assignedTo.id === user.id` (of ADMIN/FM) mag voortgang aanpassen. Dit
