@@ -35,8 +35,11 @@ export interface WorkRequest {
   requestNumber: string;
   title: string;
   description: string;
-  requestedBy: { displayName: string; email: string };
+  requestedBy: { id: string; displayName: string; email: string };
   campus: { name: string };
+  building?: { id: string; name: string; code?: string | null };
+  department?: { id: string; name: string; code?: string | null };
+  room?: { id: string; name?: string | null; number?: string | null };
   location?: { name: string };
   category?: { name: string };
   priority: Priority;

@@ -6,9 +6,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft,
+  Building,
   Building2,
   CheckCircle2,
   Clock,
+  DoorOpen,
+  LayoutGrid,
   MapPin,
   Tag,
   User as UserIcon,
@@ -29,6 +32,8 @@ import { cn } from '@/lib/utils';
 //   • Voortgang-kaart hoort in de RECHTER zijbalk (lg:col-span-1), bovenaan.
 //   • Details-kaart staat onder Voortgang en gebruikt iconen per veld.
 //   • Hoofdkolom (lg:col-span-2) bevat: Omschrijving + Feedback.
+//   • In de Voortgang-kaart staat één indicator: een slider voor de eigenaar
+//     (de aanvrager), een statische balk voor read-only kijkers.
 // Verplaats deze blokken NIET zonder expliciete vraag van de gebruiker.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -54,8 +59,6 @@ export default function WorkRequestDetailPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const canEdit = user?.role !== 'MEDEWERKER';
-
   const {
     data: workRequest,
     isLoading,
@@ -67,6 +70,9 @@ export default function WorkRequestDetailPage() {
     enabled: !!id,
     retry: false,
   });
+
+  const isOwner =
+    !!user?.id && workRequest?.requestedBy?.id === user.id;
 
   const { data: commentsData, isLoading: commentsLoading } = useQuery<{
     data: Comment[];
@@ -304,76 +310,77 @@ export default function WorkRequestDetailPage() {
                 </span>
               </div>
 
-              <div className="mt-4">
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all duration-500',
-                      progressColor(progressDraft),
-                    )}
-                    style={{ width: `${progressDraft}%` }}
+              {isOwner ? (
+                <>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={20}
+                    value={progressDraft}
+                    disabled={progressMutation.isPending}
+                    onChange={(e) =>
+                      setProgressDraft(snapToStep(Number(e.target.value)))
+                    }
+                    className="mt-4 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-60"
                   />
-                </div>
 
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={20}
-                  value={progressDraft}
-                  disabled={!canEdit || progressMutation.isPending}
-                  onChange={(e) =>
-                    setProgressDraft(snapToStep(Number(e.target.value)))
-                  }
-                  className="mt-4 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-60"
-                />
+                  <div className="mt-2 flex justify-between gap-1">
+                    {PROGRESS_STEPS.map((step) => (
+                      <button
+                        key={step}
+                        type="button"
+                        disabled={progressMutation.isPending}
+                        onClick={() => setProgressDraft(step)}
+                        className={cn(
+                          'rounded-md px-1.5 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
+                          progressDraft === step
+                            ? 'bg-primary/15 text-primary'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                          'disabled:cursor-not-allowed disabled:opacity-60',
+                        )}
+                      >
+                        {step}%
+                      </button>
+                    ))}
+                  </div>
 
-                <div className="mt-2 flex justify-between gap-1">
-                  {PROGRESS_STEPS.map((step) => (
-                    <button
-                      key={step}
-                      type="button"
-                      disabled={!canEdit || progressMutation.isPending}
-                      onClick={() => setProgressDraft(step)}
-                      className={cn(
-                        'rounded-md px-1.5 py-0.5 text-[11px] font-medium tabular-nums transition-colors',
-                        progressDraft === step
-                          ? 'bg-primary/15 text-primary'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                        'disabled:cursor-not-allowed disabled:opacity-60',
-                      )}
-                    >
-                      {step}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {canEdit ? (
-                <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-                  {progressDirty && (
+                  <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+                    {progressDirty && (
+                      <button
+                        type="button"
+                        onClick={() => setProgressDraft(workRequest.progress ?? 0)}
+                        disabled={progressMutation.isPending}
+                        className="btn-ghost h-9 px-3"
+                      >
+                        Annuleren
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setProgressDraft(workRequest.progress ?? 0)}
-                      disabled={progressMutation.isPending}
-                      className="btn-ghost h-9 px-3"
+                      disabled={!progressDirty || progressMutation.isPending}
+                      onClick={() => progressMutation.mutate(progressDraft)}
+                      className="btn-primary h-9 px-3"
                     >
-                      Annuleren
+                      {progressMutation.isPending ? 'Opslaan...' : 'Opslaan'}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={!progressDirty || progressMutation.isPending}
-                    onClick={() => progressMutation.mutate(progressDraft)}
-                    className="btn-primary h-9 px-3"
-                  >
-                    {progressMutation.isPending ? 'Opslaan...' : 'Opslaan'}
-                  </button>
-                </div>
+                  </div>
+                </>
               ) : (
-                <p className="mt-4 text-xs text-muted-foreground">
-                  Alleen de technische dienst kan de voortgang bijwerken.
-                </p>
+                <>
+                  <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all duration-500',
+                        progressColor(workRequest.progress ?? 0),
+                      )}
+                      style={{ width: `${workRequest.progress ?? 0}%` }}
+                    />
+                  </div>
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    Alleen de aanvrager kan de voortgang bijwerken.
+                  </p>
+                </>
               )}
             </div>
 
@@ -402,6 +409,26 @@ export default function WorkRequestDetailPage() {
                 <DetailRow icon={<Building2 />} label="Campus">
                   {workRequest.campus?.name ?? '—'}
                 </DetailRow>
+
+                {workRequest.building && (
+                  <DetailRow icon={<Building />} label="Gebouw">
+                    {workRequest.building.name}
+                  </DetailRow>
+                )}
+
+                {workRequest.department && (
+                  <DetailRow icon={<LayoutGrid />} label="Afdeling">
+                    {workRequest.department.name}
+                  </DetailRow>
+                )}
+
+                {workRequest.room && (
+                  <DetailRow icon={<DoorOpen />} label="Kamer">
+                    {[workRequest.room.number, workRequest.room.name]
+                      .filter(Boolean)
+                      .join(' · ') || '—'}
+                  </DetailRow>
+                )}
 
                 {workRequest.location && (
                   <DetailRow icon={<MapPin />} label="Locatie">
