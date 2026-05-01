@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,20 +56,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (!token) {
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    let userId: string;
-    try {
-      userId = atob(token);
-    } catch {
-      return NextResponse.json({ message: 'Invalid token' }, { status: 401 });
-    }
-
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
+    if (!user || !user.isActive) {
       return NextResponse.json({ message: 'User not found' }, { status: 401 });
     }
 

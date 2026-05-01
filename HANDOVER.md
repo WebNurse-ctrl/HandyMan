@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.5
+# HandyMan - Project Handover Document v1.5 (+ v1.6 fundament in progress)
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -461,6 +461,122 @@ END $$;
 ```
 
 Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elke deploy automatisch gesynchroniseerd. `prisma db push` zonder `--accept-data-loss` faalt bij destructieve wijzigingen (bewust) zodat je stille dataverlies voorkomt. Zorg dat `DIRECT_URL` in Vercel gedefinieerd is, want `prisma db push` vereist een directe connectie (poort 5432, niet de PgBouncer-pooler op 6543).
+
+## Wat is in voorbereiding voor v1.6 — fase A (auth-fundament)
+
+> Dit is een **infrastructuur-commit** zonder UI-wijzigingen. De feature
+> wordt in drie fases uitgerold (A → B → C). Fase A levert het schema en
+> de auth-helpers; fase B de pickup-flow; fase C de invitation-flow + RBAC.
+
+### Schema-uitbreidingen
+
+- `users.password_hash TEXT NULL` — bcrypt-hash voor uitgenodigde
+  medewerkers (nullable; Entra-AD-gebruikers houden `NULL` en loggen via SSO).
+- `users.azure_ad_id` — was `NOT NULL UNIQUE`, nu `NULL UNIQUE` zodat
+  password-only accounts kunnen bestaan.
+- `users.profile_completed BOOLEAN NOT NULL DEFAULT true` — bestaande
+  users staan default op `true`; nieuwe uitgenodigde users worden op
+  `false` gezet zodat de "vul je profiel aan"-flow getriggerd kan worden.
+- `users.scope_campus_id TEXT NULL` (FK → `campuses.id`) — als ingevuld
+  ziet de gebruiker alleen werkaanvragen van die campus; `NULL` =
+  volledige organisatie.
+- `work_requests.assigned_to_id TEXT NULL` (FK → `users.id`) — eigenaar
+  na "oppikken" door TD/Diensthoofd. `requested_by_id` blijft de
+  oorspronkelijke aanvrager.
+- Nieuwe tabel `user_invitations` (id, email, token, invited_by_id,
+  suggested_role, scope_campus_id, expires_at, accepted_at, timestamps).
+
+### Auth-token migratie (base64 → JWT)
+
+Het base64-van-UUID-token is vervangen door een **HS256 JWT** met `sub`,
+`iat`, `exp` (30 dagen). Implementatie in `frontend/src/lib/auth.ts`:
+
+- `signSessionToken(userId)` / `verifySessionToken(token)`
+- `getUserIdFromRequest(request)` / `getUserFromRequest(request)`
+- `hashPassword(plain)` / `verifyPassword(plain, hash)` (bcrypt, 12 rounds)
+
+**Nieuwe env-var op Vercel**: `AUTH_SECRET` — minstens 32 random tekens
+(bijv. `openssl rand -base64 48`). Zonder deze env-var werkt login niet.
+Bestaande sessies (oude base64-tokens) zijn na de deploy ongeldig — alle
+gebruikers moeten één keer opnieuw inloggen.
+
+### Migratie-SQL (v1.6 fase A)
+
+```sql
+-- users: password_hash, profile_completed, scope_campus_id; azure_ad_id nullable
+ALTER TABLE "users"
+  ADD COLUMN IF NOT EXISTS "password_hash" TEXT,
+  ADD COLUMN IF NOT EXISTS "profile_completed" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS "scope_campus_id" TEXT;
+
+ALTER TABLE "users"
+  ALTER COLUMN "azure_ad_id" DROP NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'users_scope_campus_id_fkey'
+  ) THEN
+    ALTER TABLE "users"
+      ADD CONSTRAINT "users_scope_campus_id_fkey"
+      FOREIGN KEY ("scope_campus_id") REFERENCES "campuses"("id")
+      ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS "users_scope_campus_id_idx"
+  ON "users"("scope_campus_id");
+
+-- work_requests.assigned_to_id
+ALTER TABLE "work_requests"
+  ADD COLUMN IF NOT EXISTS "assigned_to_id" TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'work_requests_assigned_to_id_fkey'
+  ) THEN
+    ALTER TABLE "work_requests"
+      ADD CONSTRAINT "work_requests_assigned_to_id_fkey"
+      FOREIGN KEY ("assigned_to_id") REFERENCES "users"("id")
+      ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS "work_requests_assigned_to_id_idx"
+  ON "work_requests"("assigned_to_id");
+
+-- user_invitations
+CREATE TABLE IF NOT EXISTS "user_invitations" (
+    "id" TEXT NOT NULL DEFAULT gen_random_uuid()::text,
+    "email" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "invited_by_id" TEXT NOT NULL,
+    "suggested_role" TEXT NOT NULL DEFAULT 'MEDEWERKER',
+    "scope_campus_id" TEXT,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "accepted_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "user_invitations_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "user_invitations_token_key"
+  ON "user_invitations"("token");
+CREATE INDEX IF NOT EXISTS "user_invitations_email_idx"
+  ON "user_invitations"("email");
+CREATE INDEX IF NOT EXISTS "user_invitations_invited_by_id_idx"
+  ON "user_invitations"("invited_by_id");
+ALTER TABLE "user_invitations"
+  ADD CONSTRAINT "user_invitations_invited_by_id_fkey"
+  FOREIGN KEY ("invited_by_id") REFERENCES "users"("id")
+  ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "user_invitations"
+  ADD CONSTRAINT "user_invitations_scope_campus_id_fkey"
+  FOREIGN KEY ("scope_campus_id") REFERENCES "campuses"("id")
+  ON DELETE SET NULL ON UPDATE CASCADE;
+```
+
+Het meest pragmatische alternatief: `cd frontend && npx prisma db push`.
 
 ## Wat is geïmplementeerd in v1.5
 

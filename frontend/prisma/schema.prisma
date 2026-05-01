@@ -21,35 +21,62 @@ enum UserRole {
 }
 
 model User {
+  id                String    @id @default(uuid())
+  azureAdId         String?   @unique @map("azure_ad_id")
+  email             String    @unique
+  passwordHash      String?   @map("password_hash")
+  displayName       String    @map("display_name")
+  firstName         String?   @map("first_name")
+  lastName          String?   @map("last_name")
+  department        String?
+  jobTitle          String?   @map("job_title")
+  phone             String?
+  avatarUrl         String?   @map("avatar_url")
+  role              UserRole  @default(MEDEWERKER)
+  isActive          Boolean   @default(true) @map("is_active")
+  profileCompleted  Boolean   @default(true) @map("profile_completed")
+  scopeCampusId     String?   @map("scope_campus_id")
+  lastLoginAt       DateTime? @map("last_login_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  workRequests          WorkRequest[]      @relation("RequestedBy")
+  assignedWorkRequests  WorkRequest[]      @relation("WorkRequestAssignee")
+  assignedTasks         Task[]             @relation("AssignedTo")
+  createdTasks          Task[]             @relation("TaskCreatedBy")
+  taskLogs              TaskLog[]
+  createdProjects       Project[]          @relation("ProjectCreatedBy")
+  managedProjects       Project[]          @relation("ProjectManager")
+  purchaseRequests      PurchaseRequest[]  @relation("PurchaseRequestedBy")
+  purchaseApprovals     PurchaseApproval[]
+  notifications         Notification[]
+  comments              Comment[]
+  auditLogs             AuditLog[]
+  scopeCampus           Campus?            @relation("UserScopeCampus", fields: [scopeCampusId], references: [id])
+  invitationsSent       UserInvitation[]   @relation("InvitationInviter")
+
+  @@index([scopeCampusId])
+  @@map("users")
+}
+
+model UserInvitation {
   id              String    @id @default(uuid())
-  azureAdId       String    @unique @map("azure_ad_id")
-  email           String    @unique
-  displayName     String    @map("display_name")
-  firstName       String?   @map("first_name")
-  lastName        String?   @map("last_name")
-  department      String?
-  jobTitle        String?   @map("job_title")
-  phone           String?
-  avatarUrl       String?   @map("avatar_url")
-  role            UserRole  @default(MEDEWERKER)
-  isActive        Boolean   @default(true) @map("is_active")
-  lastLoginAt     DateTime? @map("last_login_at")
+  email           String
+  token           String    @unique
+  invitedById     String    @map("invited_by_id")
+  suggestedRole   UserRole  @default(MEDEWERKER) @map("suggested_role")
+  scopeCampusId   String?   @map("scope_campus_id")
+  expiresAt       DateTime  @map("expires_at")
+  acceptedAt      DateTime? @map("accepted_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  workRequests         WorkRequest[]      @relation("RequestedBy")
-  assignedTasks        Task[]             @relation("AssignedTo")
-  createdTasks         Task[]             @relation("TaskCreatedBy")
-  taskLogs             TaskLog[]
-  createdProjects      Project[]          @relation("ProjectCreatedBy")
-  managedProjects      Project[]          @relation("ProjectManager")
-  purchaseRequests     PurchaseRequest[]  @relation("PurchaseRequestedBy")
-  purchaseApprovals    PurchaseApproval[]
-  notifications        Notification[]
-  comments             Comment[]
-  auditLogs            AuditLog[]
+  invitedBy   User    @relation("InvitationInviter", fields: [invitedById], references: [id])
+  scopeCampus Campus? @relation("InvitationScopeCampus", fields: [scopeCampusId], references: [id])
 
-  @@map("users")
+  @@index([email])
+  @@index([invitedById])
+  @@map("user_invitations")
 }
 
 // ============================================================================
@@ -71,6 +98,8 @@ model Campus {
   departments  Department[]
   workRequests WorkRequest[]
   projects     Project[]
+  scopedUsers  User[]           @relation("UserScopeCampus")
+  invitations  UserInvitation[] @relation("InvitationScopeCampus")
 
   @@map("campuses")
 }
@@ -199,6 +228,7 @@ model WorkRequest {
   title           String
   description     String
   requestedById   String            @map("requested_by_id")
+  assignedToId    String?           @map("assigned_to_id")
   campusId        String            @map("campus_id")
   buildingId      String?           @map("building_id")
   departmentId    String?           @map("department_id")
@@ -215,6 +245,7 @@ model WorkRequest {
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
   requestedBy  User          @relation("RequestedBy", fields: [requestedById], references: [id])
+  assignedTo   User?         @relation("WorkRequestAssignee", fields: [assignedToId], references: [id])
   campus       Campus        @relation(fields: [campusId], references: [id])
   building     Building?     @relation(fields: [buildingId], references: [id])
   department   Department?   @relation(fields: [departmentId], references: [id])
@@ -232,6 +263,7 @@ model WorkRequest {
   @@index([status])
   @@index([campusId])
   @@index([requestedById])
+  @@index([assignedToId])
   @@index([createdAt])
   @@map("work_requests")
 }

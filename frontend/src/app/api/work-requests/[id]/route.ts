@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getUserIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
-
-function getUserId(request: NextRequest): string | null {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  try {
-    return atob(token);
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(
   request: NextRequest,
@@ -57,7 +48,7 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ) {
   try {
-    const userId = getUserId(request);
+    const userId = await getUserIdFromRequest(request);
     if (!userId) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
