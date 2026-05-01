@@ -2,7 +2,8 @@
 
 Mono-repo voor HandyMan (facility-management platform). De applicatie
 bestaat uit een Next.js frontend (in `frontend/`) en een verzameling
-docs/scripts.
+docs/scripts. Sinds **v1.6** is dit een monolithische Next.js app op
+Vercel met Supabase als database; de oudere `backend/` map is legacy.
 
 ## Direct lezen vóór elke wijziging
 
@@ -26,18 +27,45 @@ niet — het is contextueel relevant voor élke UI-wijziging.
   https://handyman-eta-mocha.vercel.app. **Werk standaard op deze branch**
   tenzij de gebruiker uitdrukkelijk een andere noemt.
 - **`main` is GEEN deploy-bron** en loopt achter. Niet checkouten zonder
-  reden — daar mis je de v1.5 fixes (één voortgangsindicator,
-  eigenaarschap-gating, locatiehiërarchie).
+  reden — daar mis je de v1.5/v1.6 fixes.
 - **Begin elke sessie met `git fetch --all`** zodat álle remote branches
   zichtbaar zijn (er zijn er tien+). Zonder fetch lijkt het alsof minder
   werk gedaan is dan in werkelijkheid.
 - Vóór elke commit: `cd frontend && npx tsc --noEmit && npm run build`
   (beide groen).
 - Push: `git push -u origin claude/modernize-handyman-ui-EEzjx`.
-- Bij grootschalige refactors (multi-file UI overhaul) altijd eerst
-  expliciet bevestigen dat bestaande UX-keuzes (plaatsing
-  voortgangsindicator, één-indicator-regel, eigenaarschap-gating,
-  iconen in details, locatiehiërarchie) behouden moeten blijven.
+
+## Niet terugrollen — zonder expliciete vraag
+
+Bij grootschalige refactors (multi-file UI/backend overhaul) altijd eerst
+expliciet bevestigen dat onderstaande UX/architectuur-keuzes behouden
+moeten blijven. Deze zijn al meermaals per ongeluk teruggerold:
+
+- **Plaatsing voortgangsindicator** in de rechter zijbalk (UI_INVARIANTS §1).
+- **Eén-indicator-regel** (slider voor eigenaar, balk voor anderen — nooit
+  beide tegelijk).
+- **Eigenaarschap = `assignedTo`** (v1.6 fase B). Niét meer `requestedBy`,
+  niét rol-gebaseerd.
+- **Iconen + volledige locatiehiërarchie** in Details (Campus / Gebouw /
+  Afdeling / Kamer + Aanvrager + Toegewezen-aan).
+- **Pickup-knoppen leven in de Werkvooruitgang-kaart**, niet elders.
+- **MEDEWERKER-restrictie** (v1.6 fase C): mogen alleen eigen aanvragen
+  zien + nieuwe indienen. Sidebar verbergt overige nav; AppLayout
+  redirect; API geeft 403/404. Niet versoepelen zonder vraag.
+- **Auth-token = HS256 JWT** (v1.6 fase A). Niet teruggaan naar de oude
+  base64-van-UUID-token. `AUTH_SECRET` env-var is vereist.
+- **Server-side RBAC via `requireAuth`/`requireRole`** uit `lib/auth.ts`
+  voor werkaanvragen, comments, invitations, users. Niet vervangen door
+  ongated route-handlers.
+
+## Snelle architectuur-pointers
+
+- Auth-helpers: `frontend/src/lib/auth.ts` (`signSessionToken`,
+  `verifySessionToken`, `requireAuth`, `requireRole`, `hashPassword`,
+  `verifyPassword`, role-constanten).
+- Mail-helper: `frontend/src/lib/mail.ts` (`sendInvitationEmail`,
+  `buildAcceptInviteUrl`).
+- Prisma client: `frontend/src/lib/prisma.ts`.
 
 ## Onboarding-prompt voor nieuwe sessies
 

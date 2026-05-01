@@ -1,6 +1,24 @@
 # HandyMan - Setup Guide
 
-## Vereisten
+> ⚠️ **Historisch document — niet meer up-to-date**
+>
+> Dit bestand beschrijft de **oorspronkelijke** local-development opzet
+> met Docker Compose + aparte NestJS-backend + lokale PostgreSQL.
+>
+> De huidige v1.6-opzet is een **monolithische Next.js app op Vercel**
+> met Supabase als database. Er is géén Docker Compose, géén aparte
+> backend, géén eigen PostgreSQL meer.
+>
+> Voor de actuele snelstart (clone → checkout deploy-branch →
+> `npm install` → `prisma db push` → `npm run dev`) zie de
+> [`README.md`](../README.md) en
+> [`HANDOVER.md`](../HANDOVER.md) (sectie "Hoe verder te werken" en
+> "Environment Variables"). Dit bestand wordt bewaard voor historische
+> referentie.
+
+---
+
+## Vereisten (v1.0, historisch)
 
 - Node.js 20+
 - PostgreSQL 16+

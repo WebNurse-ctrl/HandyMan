@@ -1,6 +1,22 @@
 # HandyMan - Architectuur Document
 
-## Overzicht
+> ⚠️ **Historisch document — niet meer up-to-date**
+>
+> Dit bestand beschrijft de **oorspronkelijke** v1.0-architectuur:
+> aparte NestJS-backend, Azure Container Apps, eigen PostgreSQL.
+>
+> De huidige v1.6-architectuur is **monolithisch op Vercel met
+> Supabase**. Er is géén aparte backend meer; alle backend-logica zit
+> in Next.js API Routes. Auth gebruikt naast Microsoft Entra ID ook
+> bcryptjs/JWT password-login. E-mail loopt via Resend.
+>
+> Voor de actuele architectuur, schema, API-overzicht en deployment
+> zie **[`../HANDOVER.md`](../HANDOVER.md)**. Dit bestand wordt
+> bewaard voor historische referentie.
+
+---
+
+## Overzicht (v1.0, historisch)
 
 HandyMan is een moderne, schaalbare webapplicatie voor facility management, ontworpen voor organisaties met meerdere campussen. De applicatie beheert werkaanvragen, taken, projecten, aankopen en budgetten.
 

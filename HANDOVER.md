@@ -16,7 +16,12 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 - **Vercel deploy-branch (Production)**: `claude/modernize-handyman-ui-EEzjx` — élke
   push hierheen triggert een productie-deploy. **Werk standaard op deze branch**
   tenzij expliciet anders gevraagd. `main` loopt achter en is GEEN deploy-bron.
-- **v1.5 commits op deploy-branch**:
+- **v1.6 commits op deploy-branch** (meest recent eerst):
+  - `4182393` feat(users): v1.6 fase C — invitations, scope-RBAC, MEDEWERKER-restrictie
+  - `e399c18` feat(work-requests): v1.6 fase B — pickup-flow + server-side progress-gating
+  - `6b13bb3` feat(auth): v1.6 fase A — schema-fundament + JWT/bcrypt auth
+- **v1.5 commits**:
+  - `e54dd9d` docs(v1.5): lock één-indicator + eigenaarschap-gating + deploy-branch
   - `1092232` fix(work-requests): één voortgangsindicator + locatiehiërarchie op detail
   - `86c0274` fix(work-requests): restore locked detail-page layout + lock invariants
   - `a9e2039` feat(ui): modernize HandyMan with Apex-style emerald theme + dark mode
@@ -37,7 +42,9 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 | State management | Zustand (auth), TanStack Query (server state) |
 | HTTP client | Axios |
 | Toasts | react-hot-toast |
-| Auth | Microsoft Entra ID / Azure AD (OAuth 2.0) |
+| Auth (SSO) | Microsoft Entra ID / Azure AD (OAuth 2.0) |
+| Auth (password, v1.6) | bcryptjs (12 rounds) + jose JWT (HS256, 30 d) |
+| E-mail (v1.6) | Resend (uitnodigingsmails) |
 | Hosting | Vercel (serverless) |
 
 ## Architectuur
@@ -60,30 +67,39 @@ HandyMan/
 │   │   │   │   │   ├── departments/[id]/         # PATCH/DELETE + /rooms
 │   │   │   │   │   ├── rooms/[id]/               # PATCH/DELETE
 │   │   │   │   │   └── settings/                 # GET/PATCH
-│   │   │   │   ├── auth/       # login, callback, me
+│   │   │   │   ├── auth/       # login (SSO), callback, me,
+│   │   │   │   │               # v1.6 password-login + complete-profile
 │   │   │   │   ├── buildings/  # v1.3 - publiek GET (cascade select)
 │   │   │   │   ├── campuses/
 │   │   │   │   ├── categories/
 │   │   │   │   ├── dashboard/
 │   │   │   │   ├── departments/# v1.3 - publiek GET (cascade select)
+│   │   │   │   ├── invitations/# v1.6 - GET/POST list+create + [id] DELETE
+│   │   │   │   │               #         + lookup (publiek) + accept (publiek)
 │   │   │   │   ├── notifications/
 │   │   │   │   ├── projects/
 │   │   │   │   ├── purchases/
 │   │   │   │   ├── rooms/      # v1.3 - publiek GET (cascade select)
 │   │   │   │   ├── tasks/
-│   │   │   │   ├── users/      # list, [id] DELETE, [id]/role PATCH, technical-staff
-│   │   │   │   └── work-requests/  # /route.ts lijst+create,
-│   │   │   │                       # [id]/route.ts v1.4 GET/PATCH (progress),
-│   │   │   │                       # [id]/comments/route.ts v1.4 GET/POST
-│   │   │   ├── admin/          # v1.3 - tabs: Gebruikers, Campussen, Categorieën, Instellingen
-│   │   │   │   └── _components/# UsersTab, CampusesTab, CategoriesTab, SettingsTab
+│   │   │   │   ├── users/      # list (DH/FM/ADMIN), [id] PATCH/DELETE,
+│   │   │   │   │               # [id]/role legacy, technical-staff (TD/DH/FM/ADMIN)
+│   │   │   │   └── work-requests/  # /route.ts v1.6 scope-filter + MEDEWERKER own-only,
+│   │   │   │                       # [id]/route.ts v1.6 GET/PATCH (progress + assignedToId),
+│   │   │   │                       # [id]/comments/route.ts v1.6 scope-aware GET/POST
+│   │   │   ├── admin/          # v1.6 - tabs: Gebruikers, Uitnodigingen,
+│   │   │   │   │               #              Campussen, Categorieën, Instellingen
+│   │   │   │   └── _components/# UsersTab, InvitationsTab, CampusesTab,
+│   │   │   │                   # CategoriesTab, SettingsTab
+│   │   │   ├── accept-invite/  # v1.6 - /[token]/page.tsx wachtwoord instellen
 │   │   │   ├── dashboard/
-│   │   │   ├── login/
+│   │   │   ├── login/          # v1.6 - SSO + e-mail/wachtwoord-formulier
+│   │   │   ├── profile/        # v1.6 - /complete/page.tsx eerste-login flow
 │   │   │   ├── projects/
 │   │   │   ├── purchases/
 │   │   │   ├── tasks/
-│   │   │   ├── work-requests/  # /page.tsx lijst, /new cascading selects,
-│   │   │   │                   # [id]/page.tsx v1.4 detail+progress+feedback
+│   │   │   ├── work-requests/  # /page.tsx lijst (kolom Toegewezen + Oppikken-knop),
+│   │   │   │                   # /new cascading selects,
+│   │   │   │                   # [id]/page.tsx v1.6 detail + assignedTo-gating
 │   │   │   ├── layout.tsx
 │   │   │   ├── page.tsx
 │   │   │   └── providers.tsx
@@ -91,7 +107,8 @@ HandyMan/
 │   │   │   ├── layout/
 │   │   │   └── ui/
 │   │   ├── hooks/
-│   │   ├── lib/
+│   │   ├── lib/                # auth.ts (JWT/bcrypt + RBAC helpers),
+│   │   │                       # mail.ts (Resend), prisma.ts, api.ts, utils.ts
 │   │   └── types/
 │   ├── next.config.js
 │   ├── tailwind.config.js
@@ -104,29 +121,30 @@ HandyMan/
 
 ## Database Schema (Prisma)
 
-**18 tabellen** in `frontend/prisma/schema.prisma`:
+**19 tabellen** in `frontend/prisma/schema.prisma`:
 
 | Tabel | Beschrijving |
 |-------|-------------|
-| `users` | Gebruikers via Azure AD SSO. `isActive=false` fungeert als soft-delete. |
-| `campuses` | Campuslocaties (naam, code, adres, stad) |
-| **`buildings`** | **v1.3** Gebouwen per campus (campusId, name, code). Cascade delete vanuit campus. |
+| `users` | Gebruikers (Azure AD SSO én password-login, v1.6). Kolommen: `password_hash` (nullable; alleen voor uitgenodigde users), `azure_ad_id` (nullable; alleen voor SSO), `profile_completed`, `scope_campus_id` (nullable; FK → campuses). `isActive=false` = soft-delete. |
+| `campuses` | Campuslocaties (naam, code, adres, stad). |
+| **`buildings`** | **v1.3** Gebouwen per campus. Cascade delete vanuit campus. |
 | **`departments`** | **v1.3** Afdelingen. Altijd campusId, optioneel buildingId (null = direct op campus). |
-| **`rooms`** | **v1.3** Kamers/ruimtes per afdeling (name en/of number). Cascade delete vanuit afdeling. |
-| `locations` | Legacy v1.0 locaties. Nog steeds gekoppeld aan work_requests via locationId. |
-| `categories` | Categorieën met hiërarchie (parentId) en kleurlabel (HEX in `color`). |
-| `work_requests` | Werkaanvragen. v1.3: extra kolommen `building_id`, `department_id`, `room_id` (allen nullable). **v1.4**: extra kolom `progress INTEGER NOT NULL DEFAULT 0` (0–100, stappen van 20). |
-| `request_bundles` | Groepering van gerelateerde werkaanvragen |
-| `tasks` | Taken met taskNumber, toewijzing, deadline, project-koppeling |
-| `task_logs` | Werkregistratie per taak (beschrijving, uren) |
-| `projects` | Projecten met budget, voortgang |
-| `purchase_requests` | Aankopen met goedkeuringsflow, type KLEIN/GROOT |
-| `purchase_approvals` | Goedkeuringsregistratie per aankoop |
-| `comments` | Polymorf: gekoppeld aan work_request, task, of project. **v1.4**: gebruikt door de feedback-thread op de werkaanvraag detailpagina. |
-| `attachments` | Bestanden gekoppeld aan entiteiten |
-| `notifications` | In-app notificaties per gebruiker |
-| `system_config` | Key-value systeeminstellingen (beheerd via /admin Instellingen) |
-| `audit_logs` | Audit trail van alle wijzigingen |
+| **`rooms`** | **v1.3** Kamers/ruimtes per afdeling. Cascade delete vanuit afdeling. |
+| `locations` | Legacy v1.0 locaties. Nog gekoppeld aan work_requests via `locationId`. |
+| `categories` | Categorieën met hiërarchie (parentId) en kleurlabel (HEX). |
+| `work_requests` | Werkaanvragen. v1.3: `building_id`, `department_id`, `room_id`. **v1.4**: `progress INT 0–100` (stappen van 20). **v1.6**: `assigned_to_id` (nullable; eigenaar na pickup). |
+| **`user_invitations`** | **v1.6 fase A** Uitnodigingen: `email`, `token` (uniek), `invited_by_id`, `suggested_role`, `scope_campus_id`, `expires_at` (7 dagen), `accepted_at`. |
+| `request_bundles` | Groepering van gerelateerde werkaanvragen. |
+| `tasks` | Taken met taskNumber, toewijzing, deadline, project-koppeling. |
+| `task_logs` | Werkregistratie per taak (beschrijving, uren). |
+| `projects` | Projecten met budget, voortgang. |
+| `purchase_requests` | Aankopen met goedkeuringsflow, type KLEIN/GROOT. |
+| `purchase_approvals` | Goedkeuringsregistratie per aankoop. |
+| `comments` | Polymorf: work_request / task / project. **v1.4**: feedback-thread op werkaanvraag-detail. |
+| `attachments` | Bestanden gekoppeld aan entiteiten. |
+| `notifications` | In-app notificaties per gebruiker. **v1.6**: trigger bij accept-invite (`USER_REGISTERED`) → alle ADMIN/FM/DH. |
+| `system_config` | Key-value systeeminstellingen (beheerd via /admin Instellingen). |
+| `audit_logs` | Audit trail van alle wijzigingen. |
 
 ### Locatie-hiërarchie (v1.3)
 
@@ -150,70 +168,149 @@ Een afdeling hoort **altijd** bij een campus, en **optioneel** bij een gebouw va
 - **ProjectStatus**: PLANNING, ACTIEF, ON_HOLD, AFGEROND, GEANNULEERD
 - **PurchaseStatus**: AANGEVRAAGD, WACHT_OP_GOEDKEURING, GOEDGEKEURD_DIENSTHOOFD, GOEDGEKEURD, AFGEWEZEN, BESTELD, GELEVERD
 - **PurchaseType**: KLEIN, GROOT
+- **NotificationType** (v1.6): WORK_REQUEST_CREATED, WORK_REQUEST_STATUS_CHANGED, **WORK_REQUEST_ASSIGNED**, TASK_ASSIGNED, TASK_STATUS_CHANGED, TASK_DEADLINE_APPROACHING, PURCHASE_APPROVAL_NEEDED, PURCHASE_APPROVED, PURCHASE_REJECTED, PROJECT_BUDGET_ALERT, COMMENT_ADDED, **USER_REGISTERED**
 
 ## Authenticatie Flow
 
+Sinds **v1.6** zijn er **twee parallelle login-paden**: Microsoft Entra ID
+SSO (voor users met een werkaccount) en e-mail/wachtwoord (voor users die
+via een uitnodiging zijn aangemaakt). Beide eindigen in een
+**HS256 JWT-token** in `localStorage` als `handyman_token`.
+
+### Pad 1 — Microsoft Entra ID SSO
+
 ```
-Login knop → /api/auth/login → redirect naar Microsoft login
+Login knop "Inloggen met Microsoft 365" → /api/auth/login → redirect naar Microsoft
 → Gebruiker logt in met werkaccount
 → Microsoft redirect naar /api/auth/callback?code=xxx
 → Callback wisselt code voor access_token
 → Haalt profiel op via Microsoft Graph API
 → Maakt/update user in Supabase database
-→ Redirect naar /login?token=base64(userId)
+→ Redirect naar /login?token=<JWT>
 → Frontend slaat token op in localStorage
-→ /api/auth/me haalt user data op bij elke paginalading
 ```
 
-**Token**: simpele base64-encoding van de user UUID. Wordt meegestuurd als `Authorization: Bearer <token>` header.
+### Pad 2 — E-mail + wachtwoord (v1.6)
 
-**Rol-detectie**: bij eerste login wordt de rol afgeleid uit het Azure AD jobTitle veld (daarna aanpasbaar in /admin).
+```
+Admin maakt invitation → /api/invitations (POST, ADMIN/FM/DH only)
+→ Resend stuurt HTML-mail naar user met link /accept-invite/<token>
+→ User opent link → /api/invitations/lookup?token=... (publiek)
+→ User stelt wachtwoord in → /api/invitations/accept (POST, publiek)
+   → bcrypt-hash, user wordt aangemaakt of ge-reactiveerd
+   → invitation.acceptedAt gezet
+   → Notificatie naar alle ADMIN/FM/DH (USER_REGISTERED)
+   → Returns { token: <JWT>, profileCompleted: false }
+→ Frontend slaat token op, redirect naar /profile/complete
+→ User vult profiel aan → /api/auth/complete-profile
+   → profileCompleted=true, displayName="<voornaam> <familienaam>"
+→ Redirect naar /work-requests
 
-## Rollen & Rechten (RBAC)
+Latere logins: /login formulier → /api/auth/password-login (e-mail + wachtwoord)
+   → bcrypt verify → JWT
+```
+
+### Token
+
+**HS256 JWT** (lib `jose`), TTL 30 dagen, payload `{ sub: <userId>, iat, exp }`.
+Geverifieerd via env-var `AUTH_SECRET` (≥ 32 tekens). Wordt meegestuurd als
+`Authorization: Bearer <token>` header. De helpers in `lib/auth.ts`
+(`requireAuth`, `requireRole`, `getUserFromRequest`) wrappen deze
+verificatie + RBAC.
+
+**Rol-detectie**: bij SSO-login wordt de rol afgeleid uit het Azure AD
+jobTitle veld; bij invitation-flow neemt de user de `suggestedRole`
+over (door admin gekozen). In beide gevallen aanpasbaar in /admin
+Gebruikers.
+
+## Rollen & Rechten (RBAC, bijgewerkt v1.6)
 
 | Functie | MEDEWERKER | TECHNISCHE_DIENST | DIENSTHOOFD | FACILITAIR_MANAGER | ADMIN |
 |---------|:---:|:---:|:---:|:---:|:---:|
 | Aanvraag indienen | x | x | x | x | x |
-| Alle aanvragen zien | | x | x | x | x |
+| **Alleen eigen aanvragen zien** (v1.6) | x | | | | |
+| Alle aanvragen zien (binnen scope) | | x | x | x | x |
+| Werkaanvraag oppikken / loslaten (v1.6) | | x | x | x | x |
+| Voortgang bewerken (alleen eigenaar, v1.6) | | x | x | x | x |
+| Anders toewijzen (force-assign, v1.6) | | | | x | x |
 | Triage & dispatching | | x | x | x | x |
 | Taken beheren | | x | x | x | x |
 | Projecten aanmaken | | | x | x | x |
 | Aankopen goedkeuren | | | x | x | x |
 | Grote aankopen (>5000) goedkeuren | | | | x | x |
-| Beheer (/admin) | | | | x | x |
+| **Medewerkers uitnodigen** (v1.6) | | | x | x | x |
+| **Rol + scope toekennen** (v1.6) | | | x | x | x |
+| Beheer (/admin) | | | x (Gebruikers + Uitnodigingen) | x (alle tabs) | x (alle tabs) |
+| Campussen / categorieën / instellingen | | | | x | x |
 
-**Let op**: RBAC enforcement op de Next.js API routes is nog niet geïmplementeerd - de sidebar verbergt /admin voor niet-managers, maar de routes zelf checken de rol nog niet.
+**Scope-RBAC** (v1.6): elke niet-MEDEWERKER kan optioneel beperkt worden
+tot één campus via `users.scope_campus_id`. `null` = volledige organisatie.
+Alleen werkaanvragen van die campus zijn dan zichtbaar in lijst, detail
+en comments. Geldt nog **niet** voor tasks/projects/purchases (v1.7).
+
+**Server-side enforcement** (v1.6): de Next.js API routes valideren auth
++ rol via `requireAuth` / `requireRole` uit `lib/auth.ts`. De UI-only
+gating uit eerdere versies is gedicht voor werkaanvragen + comments +
+invitations + user-management. Resterende routes (tasks, projects,
+purchases, dashboard, notifications) hebben nog géén server-side rol-
+checks (UI-only) — kandidaat voor v1.7.
 
 ## API Routes Overzicht
 
 Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic = 'force-dynamic'`.
 
-### Publieke / generieke routes
+### Auth-routes
 
-| Route | Methods | Beschrijving |
-|-------|---------|-------------|
-| `/api/auth/login` | GET | Redirect naar Microsoft OAuth |
-| `/api/auth/callback` | GET | Verwerkt Microsoft callback |
-| `/api/auth/me` | GET | Huidige user ophalen |
-| `/api/work-requests` | GET, POST | Lijst + aanmaken. v1.3 accepteert `buildingId`, `departmentId`, `roomId`. **v1.4**: POST registreert de aanvraag onder de aangemelde gebruiker (decodeert Bearer token → user) i.p.v. `findFirst()`. |
-| `/api/work-requests/[id]` | **GET, PATCH** | **v1.4** Detail ophalen en bijwerken (progress/status/priority/rejectionReason). Bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`. |
-| `/api/work-requests/[id]/comments` | **GET, POST** | **v1.4** Feedback-thread voor een werkaanvraag. POST plaatst een comment onder de aangemelde gebruiker. |
-| `/api/tasks` | GET, POST | Taken |
-| `/api/projects` | GET, POST | Projecten |
-| `/api/purchases` | GET, POST | Aankopen |
-| `/api/notifications` | GET | Notificaties |
-| `/api/notifications/count` | GET | Ongelezen aantal |
-| `/api/notifications/read-all` | PATCH | Alles als gelezen |
-| `/api/users` | GET | Gebruikerslijst |
-| `/api/users/[id]` | **DELETE** | **v1.3** Soft-delete (isActive=false) |
-| `/api/users/[id]/role` | **PATCH** | **v1.3** Rol van gebruiker wijzigen |
-| `/api/users/technical-staff` | GET | Technisch personeel |
-| `/api/campuses` | GET | Actieve campussen |
-| `/api/buildings` | GET | **v1.3** `?campusId=` vereist. Voor cascade selects. |
-| `/api/departments` | GET | **v1.3** `?campusId=` of `?buildingId=`. Met `&scope=direct` enkel buildingId=null. |
-| `/api/rooms` | GET | **v1.3** `?departmentId=` vereist. Voor cascade selects. |
-| `/api/categories` | GET | Actieve categorieën |
-| `/api/dashboard/*` | GET | KPI endpoints |
+| Route | Methods | Auth | Beschrijving |
+|-------|---------|------|-------------|
+| `/api/auth/login` | GET | publiek | Redirect naar Microsoft OAuth (SSO-pad) |
+| `/api/auth/callback` | GET | publiek | Verwerkt Microsoft callback → JWT (v1.6) |
+| `/api/auth/me` | GET | JWT | Huidige user ophalen incl. `profileCompleted`, `scopeCampusId` |
+| `/api/auth/password-login` | **POST** | publiek | **v1.6** E-mail + wachtwoord → JWT (bcrypt verify) |
+| `/api/auth/complete-profile` | **POST** | JWT | **v1.6** firstName/lastName/phone/jobTitle/department + zet `profileCompleted=true` |
+
+### Invitation-routes (v1.6)
+
+| Route | Methods | Auth | Beschrijving |
+|-------|---------|------|-------------|
+| `/api/invitations` | GET, POST | ADMIN/FM/DH | Lijst + aanmaken. POST verstuurt mail via Resend; bij mailfout wordt invitation gerold-back. |
+| `/api/invitations/[id]` | DELETE | ADMIN/FM/DH | Intrekken. Geblokkeerd als al geaccepteerd. |
+| `/api/invitations/lookup` | GET | publiek | `?token=` → `{ valid, email, inviterName, expiresAt }` of `{ valid: false, reason }` |
+| `/api/invitations/accept` | POST | publiek | `{ token, password }` → user + JWT + USER_REGISTERED notificaties. Wachtwoord ≥ 10 tekens. |
+
+### Werkaanvragen (v1.6 scope-aware)
+
+| Route | Methods | Auth | Beschrijving |
+|-------|---------|------|-------------|
+| `/api/work-requests` | GET, POST | JWT | GET filtert op scope (`scopeCampusId`) en eigenaarschap (MEDEWERKER → eigen). POST: iedereen mag indienen. Lijst includet `assignedTo`. |
+| `/api/work-requests/[id]` | GET, PATCH | JWT | GET/PATCH met scope-check; 404 voor buiten-scope. PATCH velden: `progress` (eigenaar/admin), `status`, `priority`, `rejectionReason`, **`assignedToId`** (claim/release/force per RBAC, v1.6). |
+| `/api/work-requests/[id]/comments` | GET, POST | JWT | Scope-aware. MEDEWERKER ziet alleen eigen aanvraag. |
+
+### Beheer-routes voor users (v1.6)
+
+| Route | Methods | Auth | Beschrijving |
+|-------|---------|------|-------------|
+| `/api/users` | GET | DH/FM/ADMIN | Gebruikerslijst incl. `scopeCampus`. |
+| `/api/users/[id]` | PATCH, DELETE | DH/FM/ADMIN | PATCH `{ role?, scopeCampusId? }` (v1.6). DELETE = soft-delete. |
+| `/api/users/[id]/role` | PATCH | DH/FM/ADMIN | Legacy alias voor rolwijziging (gelockt v1.6). |
+| `/api/users/technical-staff` | GET | TD/DH/FM/ADMIN | Lijst voor toewijs-modal. v1.6 incl. DIENSTHOOFD. |
+
+### Andere generieke routes
+
+| Route | Methods | Auth | Beschrijving |
+|-------|---------|------|-------------|
+| `/api/tasks` | GET, POST | UI-only | Taken (rol-check nog niet server-side) |
+| `/api/projects` | GET, POST | UI-only | Projecten |
+| `/api/purchases` | GET, POST | UI-only | Aankopen |
+| `/api/notifications` | GET | UI-only | Notificaties |
+| `/api/notifications/count` | GET | UI-only | Ongelezen aantal |
+| `/api/notifications/read-all` | PATCH | UI-only | Alles als gelezen |
+| `/api/campuses` | GET | publiek | Actieve campussen (gebruikt door /work-requests/new) |
+| `/api/buildings` | GET | publiek | `?campusId=` voor cascade selects |
+| `/api/departments` | GET | publiek | `?campusId=` of `?buildingId=`. Met `&scope=direct` alleen direct-op-campus |
+| `/api/rooms` | GET | publiek | `?departmentId=` voor cascade selects |
+| `/api/categories` | GET | publiek | Actieve categorieën |
+| `/api/dashboard/*` | GET | UI-only | KPI endpoints (MEDEWERKER ziet sidebar niet, maar API niet ge-gate) |
 
 ### Beheer-routes (`/api/admin/*`, v1.3)
 
@@ -237,19 +334,28 @@ Alle routes staan in `frontend/src/app/api/` en gebruiken `export const dynamic 
 | Route | Component | Beschrijving |
 |-------|-----------|-------------|
 | `/` | page.tsx | Redirect naar /dashboard |
-| `/login` | login/page.tsx | Microsoft SSO login |
-| `/dashboard` | dashboard/page.tsx | KPI kaarten, trends, werklast, budgetten |
-| `/work-requests` | work-requests/page.tsx | Tabel met filters |
-| `/work-requests/new` | work-requests/new/page.tsx | **v1.3** Formulier met cascading locatie selects: Campus → (Gebouw) → Afdeling → Kamer |
-| `/work-requests/[id]` | work-requests/[id]/page.tsx | **v1.4** Detailpagina: meta (aanvrager, campus/gebouw/afd./kamer, categorie, timestamps), voortgangsslider 0/20/40/60/80/100 % met auto-statusovergang, feedback-thread (Comments). Slider disabled voor MEDEWERKER. |
-| `/tasks` | tasks/page.tsx | Takenlijst |
-| `/projects` | projects/page.tsx | Projectkaarten |
-| `/purchases` | purchases/page.tsx | Aankopentabel |
-| `/admin` | admin/page.tsx | **v1.3** Tabbed beheer: Gebruikers / Campussen / Categorieën / Instellingen |
+| `/login` | login/page.tsx | **v1.6** SSO-knop **én** e-mail/wachtwoord-formulier |
+| `/accept-invite/[token]` | accept-invite/[token]/page.tsx | **v1.6** Wachtwoord-instellen vanuit uitnodiging; bij succes auto-login + redirect naar `/profile/complete` |
+| `/profile/complete` | profile/complete/page.tsx | **v1.6** Eerste-login profielformulier (voornaam, familienaam, telefoon, functie, afdeling). AppLayout forceert deze route zolang `profileCompleted=false`. |
+| `/profile` | profile/page.tsx | Eigen profiel + theme-toggle |
+| `/dashboard` | dashboard/page.tsx | KPI kaarten, trends, werklast, budgetten. **v1.6**: niet zichtbaar voor MEDEWERKER (sidebar verbergt + AppLayout redirect). |
+| `/work-requests` | work-requests/page.tsx | Tabel met filters. **v1.6**: kolom "Toegewezen" + inline "Oppikken"-knop voor TD/DH/ADMIN/FM op `INGEDIEND`-rijen. |
+| `/work-requests/new` | work-requests/new/page.tsx | **v1.3** Cascading locatie-selects: Campus → (Gebouw) → Afdeling → Kamer. |
+| `/work-requests/[id]` | work-requests/[id]/page.tsx | **v1.6** Detailpagina (LOCKED). Slider voor `assignedTo`-eigenaar (niet meer aanvrager); pickup/loslaten/anders-toewijzen-knoppen; "Toegewezen aan"-rij in Details. Zie `docs/UI_INVARIANTS.md` §1. |
+| `/tasks` | tasks/page.tsx | Takenlijst (verborgen voor MEDEWERKER) |
+| `/projects` | projects/page.tsx | Projectkaarten (verborgen voor MEDEWERKER) |
+| `/purchases` | purchases/page.tsx | Aankopentabel (verborgen voor MEDEWERKER) |
+| `/admin` | admin/page.tsx | **v1.6** Tabs (rol-gefilterd): Gebruikers, Uitnodigingen (DH/FM/ADMIN); Campussen, Categorieën, Instellingen (FM/ADMIN). |
 
-### Admin tabs (v1.3)
+### Admin tabs (v1.6)
 
-- **Gebruikers** (`_components/UsersTab.tsx`): tabel met rol-dropdown (direct opslaan) en verwijderknop (soft-delete)
+- **Gebruikers** (`_components/UsersTab.tsx`): tabel met rol-dropdown,
+  scope-dropdown (Volledige organisatie | Campus X) en verwijderknop
+  (soft-delete). Zichtbaar voor DH/FM/ADMIN.
+- **Uitnodigingen** (`_components/InvitationsTab.tsx`, **v1.6**):
+  formulier (e-mail + voorgestelde rol + scope) → verstuurt via Resend.
+  Lijst lopende uitnodigingen met intrekken-knop + lijst geaccepteerde
+  uitnodigingen. Zichtbaar voor DH/FM/ADMIN.
 - **Campussen** (`_components/CampusesTab.tsx`): master-detail lay-out
   - Linkerlijst: alle campussen met telling van gebouwen/afdelingen
   - Rechterpaneel: tabs Gegevens / Gebouwen / Afdelingen (direct)
@@ -275,36 +381,39 @@ Cascading selects in `/work-requests/new`:
 
 De waardes worden verstuurd als `buildingId`, `departmentId`, `roomId` naar `/api/work-requests` POST.
 
-### Werkaanvraag detailpagina (v1.4 — bijgewerkt in v1.5)
+### Werkaanvraag detailpagina (v1.6 — pickup-flow)
 
-Route: `/work-requests/[id]` — twee-koloms layout (zie ook `docs/UI_INVARIANTS.md` §1):
+Route: `/work-requests/[id]` — twee-koloms layout (zie ook `docs/UI_INVARIANTS.md` §1, GELOCKT):
 
 **Hoofdkolom (`lg:col-span-2`)**:
 
 1. **Omschrijving** met optioneel een weigeringsreden.
-2. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
+2. **Feedback**: lijst van comments (chronologisch) + inline textarea. Iedere gebruiker met toegang kan posten.
 
 **Rechterzijbalk (`lg:col-span-1`)**:
 
-3. **Werkvooruitgang** — toont **exact één indicator**:
-   - **Eigenaar van de werkaanvraag** (`requestedBy.id === user.id`): range-slider `min=0 max=100 step=20` met klikbare stap-knoppen (0/20/40/60/80/100) en Opslaan/Annuleren controls. **Geen** statische gevulde balk erboven.
-   - **Read-only kijkers** (alle anderen): alléén een gevulde balk + percentage. Geen slider, geen stap-knoppen. Tekst onderaan: *"Alleen de aanvrager kan de voortgang bijwerken."*
+3. **Werkvooruitgang** — toont **exact één indicator** (regel ongewijzigd sinds v1.5, wel **andere eigenaar-definitie**):
+   - **Toegewezen behandelaar** (`workRequest.assignedTo?.id === user.id`, v1.6): range-slider `min=0 max=100 step=20` met klikbare stap-knoppen en Opslaan/Annuleren. **Geen** statische gevulde balk erboven.
+   - **Alle anderen** (incl. de oorspronkelijke aanvrager): alléén een gevulde balk + percentage. Tekst onderaan: *"Alleen ${assignedTo.displayName} kan de voortgang bijwerken."* of *"Niemand pikt deze aanvraag op..."* als nog niet toegewezen.
    - Kleur van de balk: grijs (0) → oranje (≥20) → blauw (≥60) → groen (=100).
-   - **Eigenaarschap**, niet rol, bepaalt het bewerkrecht. De vroegere `canEdit = user?.role !== 'MEDEWERKER'` is afgeschaft.
-   - Server-side gating ontbreekt nog (de PATCH `/api/work-requests/[id]` accepteert een progress-update van iedere geldige token — zie Bekende Beperkingen §1).
-   - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
+   - Onder de slider/balk: knoppenrij **Oppikken / Loslaten / Anders toewijzen** (rolafhankelijk, v1.6). Zie UI_INVARIANTS §1 punt 8.
+   - **Server-side gating** (v1.6 fase B): `PATCH /api/work-requests/[id]` met `progress` accepteert alleen `assignedTo.id === user.id` (of ADMIN/FM). De UI-only-gating-leemte uit eerdere versies is dicht.
+   - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij claim of bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
 4. **Details** met iconen per veld:
-   - `User` — Aanvrager (avatar + naam + email)
-   - `Building2` — Campus (altijd getoond)
+   - `User` — **Aanvrager** (origineel; altijd zichtbaar)
+   - `UserCheck` — **Toegewezen aan** (v1.6; "Nog niet opgepikt" als leeg)
+   - `Building2` — Campus
    - `Building` — Gebouw (alléén als toegekend)
    - `LayoutGrid` — Afdeling (alléén als toegekend)
    - `DoorOpen` — Kamer (alléén als toegekend; toont `nummer · naam`)
-   - `MapPin` — Legacy `location` (alléén als ingevuld, voor backward compatibility)
+   - `MapPin` — Legacy `location` (backward compat)
    - `Tag` — Categorie
    - `Clock` — Laatst bijgewerkt
    - `CheckCircle2` — Afgewerkt op (alléén als `resolvedAt`)
 
-De API-include op `/api/work-requests/[id]` (GET én PATCH) levert `requestedBy.id`, `building`, `department`, `room` zodat de frontend eigenaarschap kan bepalen en de hiërarchie kan tonen.
+De API-include op `/api/work-requests/[id]` (GET én PATCH) levert
+`requestedBy`, **`assignedTo`** (v1.6), `building`, `department`, `room`
+zodat de frontend eigenaarschap kan bepalen en de hiërarchie kan tonen.
 
 ### Cache-gedrag (v1.4)
 
@@ -318,10 +427,18 @@ Mutaties invalideren expliciet `['work-requests']`, `['dashboard']`, `['work-req
 
 ## UI Design Systeem
 
-- **Kleuren**: primary (blauw), accent (oranje), success (groen), warning (oranje), danger (rood)
-- **CSS classes**: `.card`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-ghost`, `.input`, `.label`, `.badge-*`
-- **Status badges**: `getStatusColor()` en `getStatusLabel()` in `lib/utils.ts`
-- **Prioriteit**: `PriorityIndicator` component
+- **Kleuren** (v1.5 emerald/cyan thema): primary `#10b981` (emerald),
+  accent `#06b6d4` (cyan), success/warning/destructive via CSS-variabelen.
+  Definities in `frontend/src/app/globals.css` (`:root` + `.dark`).
+- **Theme toggle**: `next-themes`, storage key `handyman-theme`. Bediening
+  via `frontend/src/components/ui/ThemeToggle.tsx` (navbar + /profile).
+- **CSS classes**: `.card`, `.card-elevated`, `.btn-primary`, `.btn-secondary`,
+  `.btn-danger`, `.btn-ghost`, `.input`, `.label`, `.badge-*`,
+  `.brand-mark`, `.text-gradient-brand`.
+- **Iconen**: lucide-react (geen eigen inline SVG's in nieuwe pagina's,
+  zie UI_INVARIANTS §3).
+- **Status badges**: `getStatusColor()` en `getStatusLabel()` in `lib/utils.ts`.
+- **Prioriteit**: `PriorityIndicator` component.
 
 ## Environment Variables (Vercel)
 
@@ -761,23 +878,58 @@ Het meest pragmatische alternatief: `cd frontend && npx prisma db push`.
 
 ## Bekende Beperkingen
 
-Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.5+:
+Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.7+.
+Items die in v1.6 zijn opgelost staan ter referentie als ✅ vermeld.
 
-1. **RBAC / eigenaarschap-enforcement op API routes**: de Next.js API routes controleren momenteel niet de gebruikersrol of het eigenaarschap. De werkaanvraag detailpagina gating is UI-only; de PATCH `/api/work-requests/[id]` accepteert een voortgangs-update van elke geldige token, ongeacht of die token van de aanvrager is. Server-side controle (`user.id === workRequest.requestedById`) is een v1.6-taak.
-2. **Foto upload**: het werkaanvraag formulier toont een upload area, maar de daadwerkelijke file upload is nog niet geïmplementeerd.
-3. **Taak- en projectdetail**: `/tasks/[id]` en `/projects/[id]` ontbreken nog (alleen `/work-requests/[id]` bestaat vanaf v1.4).
-4. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI.
-5. **Comments op taken/projecten**: de `comments` tabel is polymorf, maar UI-integratie bestaat momenteel alleen voor werkaanvragen (v1.4).
-6. **E-mail notificaties**: alleen in-app notificaties, geen Microsoft Graph email integratie.
-7. **Taak werkregistratie**: er is geen UI voor het logboek/werkregistratie bij taken.
-8. **Zoekfunctie**: de globale zoekbalk in de navbar is niet functioneel.
-9. **Mobile sidebar**: de hamburger menu toggle werkt niet op mobile.
-10. **Token security**: het token is een simpele base64 van de user ID - niet cryptografisch veilig.
-11. **Seed data**: de database is leeg bij eerste deploy - gebruik /admin om campussen/categorieën aan te maken.
-12. **Goedkeuringsflow UI**: aankoop goedkeuren/afwijzen knoppen ontbreken in de UI.
-13. **Budget alerts**: budget overschrijding notificaties niet geïmplementeerd.
-14. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt niet op Vercel serverless.
-15. **Legacy Location tabel**: naast de nieuwe Building/Department/Room hiërarchie bestaat nog de oude `locations` tabel die via `WorkRequest.locationId` gekoppeld is. Voor nieuwe aanvragen wordt alleen nog de nieuwe hiërarchie gebruikt; de oude data blijft bestaan voor backward compatibility.
+### Opgelost in v1.6
+
+- ✅ **RBAC / eigenaarschap op werkaanvragen**: `requireAuth` + `requireRole`
+  helpers; scope-filter; MEDEWERKER own-only; progress-PATCH server-side
+  ge-gate op `assignedTo`.
+- ✅ **E-mail-integratie**: Resend voor uitnodigingsmails (HTML-template
+  in `lib/mail.ts`).
+- ✅ **Token security**: bcrypt-passwords + HS256 JWT (was base64-UUID).
+
+### Open
+
+1. **RBAC voor tasks/projects/purchases/dashboard/notifications API**:
+   nog UI-only ge-gate. MEDEWERKER kan in theorie via curl `/api/tasks`
+   bevragen — UI toont het niet maar server geeft data terug. v1.7-taak.
+2. **Scope-filter op tasks/projects/purchases**: de `scope_campus_id`
+   wordt momenteel alleen op werkaanvragen toegepast (zoals afgesproken
+   in v1.6). Uitbreiden naar overige entiteiten = v1.7.
+3. **Wachtwoord-reset / "vergeten"-flow**: er is geen reset-endpoint;
+   admin moet manueel een nieuwe uitnodiging sturen als iemand z'n
+   wachtwoord vergeten is.
+4. **Rate-limiting op `/api/auth/password-login`**: brute-force-bescherming
+   ontbreekt. Vercel/edge rate-limit toevoegen in v1.7.
+5. **Profiel bewerken na completion**: `/profile` toont gegevens maar
+   editen werkt niet — alleen `/profile/complete` schrijft (eenmalig).
+6. **Foto upload**: het werkaanvraag formulier toont een upload area,
+   maar de daadwerkelijke file upload is nog niet geïmplementeerd.
+7. **Taak- en projectdetail**: `/tasks/[id]` en `/projects/[id]` ontbreken.
+8. **Work request conversie**: "Omzetten naar taak/project/aankoop"
+   knoppen bestaan niet in de UI.
+9. **Comments op taken/projecten**: de `comments` tabel is polymorf,
+   maar UI-integratie bestaat alleen voor werkaanvragen.
+10. **Taak werkregistratie**: geen UI voor het logboek bij taken.
+11. **Zoekfunctie**: de globale zoekbalk in de navbar is niet functioneel.
+12. **Mobile sidebar**: de hamburger menu toggle werkt niet op mobile.
+13. **Seed data**: de database is leeg bij eerste deploy — gebruik
+    `/admin` om campussen/categorieën aan te maken. Eerste user wordt via
+    Microsoft SSO automatisch aangemaakt; na inloggen kan deze zichzelf
+    de ADMIN-rol toekennen via een directe Supabase-update.
+14. **Goedkeuringsflow UI**: aankoop goedkeuren/afwijzen knoppen
+    ontbreken in de UI.
+15. **Budget alerts**: budget-overschrijding notificaties niet
+    geïmplementeerd.
+16. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt
+    niet op Vercel serverless.
+17. **Legacy Location tabel**: naast de nieuwe Building/Department/Room
+    hiërarchie bestaat nog de oude `locations` tabel die via
+    `WorkRequest.locationId` gekoppeld is. Voor nieuwe aanvragen wordt
+    alleen de nieuwe hiërarchie gebruikt; oude data blijft voor backward
+    compatibility.
 
 ## Vercel Deployment Configuratie
 
@@ -796,7 +948,7 @@ Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.5+:
 3. Checkout de **deploy-branch**: `git checkout claude/modernize-handyman-ui-EEzjx` (NIET `main` — dat is achterhaald en niet wat Vercel deployt).
 4. Werk in `frontend/` — dat is de actieve app.
 5. **Vóór elke commit**: lees `docs/UI_INVARIANTS.md` en `frontend/CLAUDE.md`. De SessionStart-hook toont de invariants automatisch. Run `cd frontend && npx tsc --noEmit && npm run build` om groen licht te krijgen.
-6. Na schema-wijzigingen: update `frontend/prisma/schema.prisma`, draai `npx prisma db push` tegen de Supabase DB (of schrijf equivalente SQL voor de SQL Editor). Alternatief: zet Vercel's Build Command op `npm run build:with-db-sync` zodat elke deploy het schema automatisch synchroniseert.
+6. Na schema-wijzigingen: update `frontend/prisma/schema.prisma`, draai `npx prisma db push` tegen de Supabase DB (of schrijf equivalente SQL voor de SQL Editor). Alternatief: zet Vercel's Build Command op `npm run build:with-db-sync` zodat elke deploy het schema automatisch synchroniseert. **Let op**: enum-uitbreidingen (zoals v1.6 `NotificationType.USER_REGISTERED`) vereisen `ALTER TYPE ... ADD VALUE` los uitgevoerd — niet binnen een transactie. `prisma db push` regelt dit correct.
 7. Voor een nieuwe feature: blijf op `claude/modernize-handyman-ui-EEzjx` of maak een feature branch vanaf die branch. Een feature branch ergens anders heeft géén effect op de live deploy.
 8. `git push -u origin claude/modernize-handyman-ui-EEzjx` triggert automatisch een Vercel productie-deployment.
 9. De `backend/` map bevat de originele NestJS code als referentie; deze draait niet op Vercel.

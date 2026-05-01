@@ -15,6 +15,9 @@ bestaande functionaliteit verbreken of UX-keuzes terugrollen zijn
 - lucide-react voor iconen
 - recharts voor charts
 - @tanstack/react-query · zustand · prisma
+- **Auth (v1.6)**: jose (HS256 JWT) + bcryptjs (password-hashing)
+- **E-mail (v1.6)**: resend (uitnodigingsmails, HTML-template in
+  `src/lib/mail.ts` met emerald/cyan gradient header)
 
 ## Themasysteem
 
@@ -44,8 +47,55 @@ nieuwe vraag.
 Op dit moment gelockt:
 
 - `src/app/work-requests/[id]/page.tsx` — voortgangsindicator hoort in
-  de rechterzijbalk, details-kaart heeft iconen per veld. Zie
+  de rechterzijbalk; details-kaart heeft iconen per veld; pickup-knoppen
+  leven in de Werkvooruitgang-kaart; eigenaar = `assignedTo`. Zie
   `docs/UI_INVARIANTS.md` §1.
+
+## Auth-flow pagina's (v1.6)
+
+Drie pagina's hangen samen aan de invitation/login-flow. Pas ze samen aan
+of niet:
+
+- `src/app/login/page.tsx` — toont **zowel** Microsoft 365 SSO **als**
+  e-mail/wachtwoord-formulier. Beide eindigen in een JWT in localStorage.
+- `src/app/accept-invite/[token]/page.tsx` — wachtwoord instellen vanuit
+  een uitnodigingslink. Roept `/api/invitations/lookup` voor validatie
+  en `/api/invitations/accept` voor activatie. Bij succes → auto-login
+  + redirect naar `/profile/complete`.
+- `src/app/profile/complete/page.tsx` — eerste-login profielformulier
+  (voornaam/familienaam/telefoon/functie/afdeling). AppLayout redirect
+  élke geauthenticeerde user met `profileCompleted=false` naar deze
+  pagina, ongeacht waar ze proberen te navigeren.
+
+## RBAC + scope op de frontend
+
+- `src/components/layout/AppLayout.tsx` regelt twee redirects:
+  - `profileCompleted=false` → `/profile/complete`
+  - `role === 'MEDEWERKER'` op een niet-toegestane route → `/work-requests`
+- `src/components/layout/Sidebar.tsx` filtert nav-items op rol. MEDEWERKER
+  ziet alleen "Werkaanvragen" + de profile-link in de footer.
+- API-aanroepen zijn server-side ge-gate via `lib/auth.ts`. Nooit alleen
+  op UI-gating vertrouwen voor gevoelige acties.
+
+## Auth-helper gebruik in API-routes
+
+Standaardpatroon voor een nieuwe `route.ts`:
+
+```ts
+import { requireAuth, requireRole, ADMIN_ROLES, INVITE_ROLES } from '@/lib/auth';
+
+// Iedereen ingelogd:
+const auth = await requireAuth(request);
+if (!auth.ok) return auth.response;
+const { user, isMedewerker, scopeCampusId } = auth.ctx;
+
+// Of specifieke rollen:
+const auth = await requireRole(request, INVITE_ROLES);
+```
+
+`requireAuth` zorgt automatisch voor 401 op ontbrekend/ongeldig token.
+`requireRole` voegt een 403 toe bij verkeerde rol. Nooit de auth-logica
+in een nieuwe route opnieuw uitschrijven.
 
 ## Testen vóór je commit
 
@@ -61,4 +111,15 @@ Als beide groen zijn mag je committen.
 ## Branch
 
 Werk standaard op `claude/modernize-handyman-ui-EEzjx` tenzij anders
-gevraagd.
+gevraagd. Dit is de Vercel productie-deploy-branch.
+
+## Nieuwe env-vars sinds v1.6
+
+Vóór een nieuwe deploy moet op Vercel ingesteld zijn:
+
+- `AUTH_SECRET` — minstens 32 random tekens (HS256 JWT-signing).
+- `RESEND_API_KEY` — voor uitnodigingsmails.
+- `MAIL_FROM` — bv. `HandyMan <noreply@jouwdomein.be>`.
+- `APP_URL` — publieke URL voor accept-invite links.
+
+Zonder deze vars werken login/invitation-flow niet.
