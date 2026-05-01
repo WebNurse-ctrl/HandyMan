@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { HandHelping, Plus } from 'lucide-react';
+import toast from 'react-hot-toast';
 import AppLayout from '@/components/layout/AppLayout';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -11,14 +12,17 @@ import PriorityIndicator from '@/components/ui/PriorityIndicator';
 import Pagination from '@/components/ui/Pagination';
 import PageHeader from '@/components/ui/PageHeader';
 import FilterChips from '@/components/ui/FilterChips';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiPatch } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { WorkRequest, PaginatedResponse } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 
+const PICKUP_ROLES = ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'ADMIN', 'FACILITAIR_MANAGER'];
+
 export default function WorkRequestsPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -31,6 +35,23 @@ export default function WorkRequestsPage() {
         ...(statusFilter && { status: statusFilter }),
       }),
   });
+
+  const pickupMutation = useMutation({
+    mutationFn: (workRequestId: string) =>
+      apiPatch<WorkRequest>(`/api/work-requests/${workRequestId}`, {
+        assignedToId: user?.id,
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['work-request', updated.id], updated);
+      queryClient.invalidateQueries({ queryKey: ['work-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Aanvraag opgepikt');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err?.response?.data?.message ?? 'Oppikken mislukt'),
+  });
+
+  const canPickup = !!user?.role && PICKUP_ROLES.includes(user.role);
 
   const columns = [
     {
@@ -62,6 +83,16 @@ export default function WorkRequestsPage() {
       ),
     },
     {
+      key: 'assignedTo',
+      label: 'Toegewezen',
+      render: (item: WorkRequest) =>
+        item.assignedTo ? (
+          <span className="text-foreground">{item.assignedTo.displayName}</span>
+        ) : (
+          <span className="text-xs italic text-muted-foreground">Niet opgepikt</span>
+        ),
+    },
+    {
       key: 'priority',
       label: 'Prioriteit',
       render: (item: WorkRequest) => <PriorityIndicator priority={item.priority} />,
@@ -77,6 +108,29 @@ export default function WorkRequestsPage() {
       render: (item: WorkRequest) => (
         <span className="text-muted-foreground">{formatDateTime(item.createdAt)}</span>
       ),
+    },
+    {
+      key: 'actions',
+      label: '',
+      render: (item: WorkRequest) => {
+        const showPickup =
+          canPickup && !item.assignedTo && item.status === 'INGEDIEND';
+        if (!showPickup) return null;
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              pickupMutation.mutate(item.id);
+            }}
+            disabled={pickupMutation.isPending}
+            className="btn-secondary h-7 px-2 text-xs"
+          >
+            <HandHelping className="h-3.5 w-3.5" />
+            Oppikken
+          </button>
+        );
+      },
     },
   ];
 

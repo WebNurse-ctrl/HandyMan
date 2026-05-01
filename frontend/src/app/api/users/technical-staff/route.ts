@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const staff = await prisma.user.findMany({
       where: {
-        role: { in: ['TECHNISCHE_DIENST', 'FACILITAIR_MANAGER'] },
+        role: { in: ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'FACILITAIR_MANAGER'] },
         isActive: true,
       },
       select: {

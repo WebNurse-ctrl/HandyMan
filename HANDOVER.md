@@ -462,6 +462,54 @@ END $$;
 
 Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elke deploy automatisch gesynchroniseerd. `prisma db push` zonder `--accept-data-loss` faalt bij destructieve wijzigingen (bewust) zodat je stille dataverlies voorkomt. Zorg dat `DIRECT_URL` in Vercel gedefinieerd is, want `prisma db push` vereist een directe connectie (poort 5432, niet de PgBouncer-pooler op 6543).
 
+## Wat is in voorbereiding voor v1.6 — fase B (pickup-flow)
+
+> **Eigenaarschap losgekoppeld van aanvragerschap.** TD en Diensthoofd
+> "pikken aanvragen op" via een knop; pas dán krijgen ze het bewerkrecht
+> op de voortgangsslider. De aanvrager blijft altijd zichtbaar in
+> Details, maar heeft géén bewerkrecht meer op de voortgang.
+
+### API
+
+`PATCH /api/work-requests/[id]` accepteert nu `assignedToId`:
+
+| Action | Body | Permissie | Side effect |
+|---|---|---|---|
+| **Claim (zelf)** | `{ assignedToId: <currentUser.id> }` | TD/DH/ADMIN/FM, alleen als `status === 'INGEDIEND'` en geen huidige eigenaar | Status `INGEDIEND` → `IN_BEHANDELING` |
+| **Release (zelf)** | `{ assignedToId: null }` | huidige `assignedTo` of ADMIN/FM | — |
+| **Force-assign** | `{ assignedToId: <other.id> }` | alleen ADMIN/FM; doelgebruiker moet TD/DH/ADMIN/FM zijn | Status `INGEDIEND` → `IN_BEHANDELING` |
+
+`PATCH` met `progress` is nu **server-side ge-gate**: alleen
+`assignedTo.id === user.id` (of ADMIN/FM) mag voortgang aanpassen. Dit
+sluit de UI-only-gating-leemte uit "Bekende Beperkingen 1" voor
+werkaanvragen.
+
+`GET /api/work-requests/[id]` en de lijst-endpoint includen `assignedTo`
+(id, displayName, email, avatarUrl, role) zodat de frontend de
+gating-checks kan uitvoeren.
+
+### UI
+
+- **Detailpagina** (`/work-requests/[id]`):
+  - Slider verschijnt alléén voor `workRequest.assignedTo?.id === user.id`.
+  - Voortgangskaart heeft een knoppenrij onderaan: `Oppikken` /
+    `Loslaten` / `Anders toewijzen` (afhankelijk van rol + state).
+  - `Anders toewijzen` opent een modal met de lijst uit
+    `/api/users/technical-staff` (uitgebreid met DIENSTHOOFD).
+  - Details-kaart bevat een nieuwe rij **Toegewezen aan** met
+    `UserCheck`-icoon. Toont "Nog niet opgepikt" wanneer leeg.
+- **Lijstpagina** (`/work-requests`):
+  - Nieuwe kolom **Toegewezen** (toont naam of italic "Niet opgepikt").
+  - Inline `Oppikken`-knop op rijen waar status=`INGEDIEND` en
+    niemand toegewezen, alleen voor TD/DH/ADMIN/FM.
+
+### UI invariants — gewijzigd
+
+`docs/UI_INVARIANTS.md` §1 is herschreven: eigenaar = `assignedTo`, niet
+meer `requestedBy`. Aanvrager blijft zichtbaar in Details. Pickup-knoppen
+zijn nu onderdeel van de Werkvooruitgang-kaart en mogen daar niet
+verdwijnen.
+
 ## Wat is in voorbereiding voor v1.6 — fase A (auth-fundament)
 
 > Dit is een **infrastructuur-commit** zonder UI-wijzigingen. De feature

@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          requestedBy: { select: { displayName: true, email: true } },
+          requestedBy: { select: { id: true, displayName: true, email: true } },
+          assignedTo: { select: { id: true, displayName: true, email: true } },
           campus: { select: { name: true } },
           location: { select: { name: true } },
           category: { select: { name: true } },

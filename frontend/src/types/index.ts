@@ -35,7 +35,15 @@ export interface WorkRequest {
   requestNumber: string;
   title: string;
   description: string;
-  requestedBy: { id: string; displayName: string; email: string };
+  requestedBy: { id: string; displayName: string; email: string; avatarUrl?: string | null };
+  assignedToId?: string | null;
+  assignedTo?: {
+    id: string;
+    displayName: string;
+    email: string;
+    avatarUrl?: string | null;
+    role?: UserRole;
+  } | null;
   campus: { name: string };
   building?: { id: string; name: string; code?: string | null };
   department?: { id: string; name: string; code?: string | null };
@@ -50,6 +58,14 @@ export interface WorkRequest {
   createdAt: string;
   updatedAt: string;
   _count?: { comments: number; attachments: number };
+}
+
+export interface TechnicalStaffMember {
+  id: string;
+  displayName: string;
+  email: string;
+  department?: string | null;
+  role: UserRole;
 }
 
 export interface Comment {

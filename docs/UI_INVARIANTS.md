@@ -37,26 +37,39 @@ het begin van elke sessie.
 1. **Voortgangsindicator (`Werkvooruitgang`-kaart) staat in de RECHTER
    zijbalk**, bovenaan. Niet in de hoofdkolom, niet onder de omschrijving.
 2. **De Werkvooruitgang-kaart toont exact ÉÉN indicator per state**:
-   - Voor de **eigenaar van de werkaanvraag** (= de aanvrager,
-     `workRequest.requestedBy.id === user.id`): alleen de slider (range 0–100,
+   - Voor de **toegewezen behandelaar** (= de eigenaar na pickup,
+     `workRequest.assignedTo?.id === user.id`): alleen de slider (range 0–100,
      step 20) plus de stap-knoppen. Geen separate gevulde balk erboven.
-   - Voor **alle anderen** (read-only kijkers): alleen een gevulde balk met
-     het percentage. Geen slider, geen stap-knoppen.
+   - Voor **alle anderen** (inclusief de oorspronkelijke aanvrager): alleen
+     een gevulde balk met het percentage. Geen slider, geen stap-knoppen.
    - Beide tegelijk tonen (statische balk + slider tegelijkertijd) is een
-     regressie en mag NIET. De rol-gebaseerde gating (`canEdit` o.b.v.
-     `user.role !== 'MEDEWERKER'`) is afgeschaft — gebruik eigenaarschap.
-3. **Details-kaart bevat een icoon per veld** (`User`, `Building2`,
-   `Building`, `LayoutGrid`, `DoorOpen`, `MapPin`, `Tag`, `Clock`,
-   `CheckCircle2`). De icoon staat in een 36×36 afgeronde tegel met
-   `bg-muted text-muted-foreground` links van label+waarde.
+     regressie en mag NIET. Eerdere rol-gating (`user.role !== 'MEDEWERKER'`)
+     en aanvrager-gating (`requestedBy.id === user.id`) zijn afgeschaft —
+     gebruik **eigenaarschap via `assignedTo`** (v1.6 fase B).
+3. **Details-kaart bevat een icoon per veld** (`User`, `UserCheck`,
+   `Building2`, `Building`, `LayoutGrid`, `DoorOpen`, `MapPin`, `Tag`,
+   `Clock`, `CheckCircle2`). De icoon staat in een 36×36 afgeronde tegel
+   met `bg-muted text-muted-foreground` links van label+waarde.
 4. **Volledige locatiehiërarchie in Details**: naast Campus toont de kaart
    ook **Gebouw**, **Afdeling** en **Kamer** (elk alléén wanneer aan de
    aanvraag toegekend). Mapping: `Building` voor gebouw, `LayoutGrid` voor
    afdeling, `DoorOpen` voor kamer. De legacy `location` (tekstlocatie)
    blijft optioneel onderaan met `MapPin` voor backward compatibility.
-5. **Hoofdkolom** bevat enkel: Omschrijving + Feedback (comments).
-6. De `<aside>` met de zijbalk gebruikt `space-y-6` zodat de twee kaarten
+5. **Aanvrager én Toegewezen-aan zijn beide zichtbaar in Details**.
+   `Aanvrager` (icoon `User`) blijft altijd zichtbaar — dit is de
+   originele indiener. `Toegewezen aan` (icoon `UserCheck`) toont de
+   huidige eigenaar of "Nog niet opgepikt".
+6. **Hoofdkolom** bevat enkel: Omschrijving + Feedback (comments).
+7. De `<aside>` met de zijbalk gebruikt `space-y-6` zodat de twee kaarten
    netjes onder elkaar staan met dezelfde gap als de hoofdkolom.
+8. **Pickup-knoppen leven in de Werkvooruitgang-kaart**, onder de
+   slider/balk, gescheiden door een `border-t border-border pt-4`. Deze
+   knoppen zijn rolafhankelijk:
+   - `Oppikken` — TD/DH/ADMIN/FM, alleen als status=`INGEDIEND` en
+     niemand is toegewezen.
+   - `Loslaten` — de huidige `assignedTo` zelf, of ADMIN/FM altijd.
+   - `Anders toewijzen` — alleen ADMIN/FM, opent een modal met de
+     technische staf.
 
 ### Waarom
 
@@ -67,9 +80,16 @@ plus een lock-comment in de pagina-source geplaatst.
 
 In v1.5 (commit `1092232`) is bovendien de dubbele voortgangsindicator
 weggewerkt en is het bewerkrecht herrouteerd van rol naar eigenaarschap
-op verzoek van de gebruiker. Deze keuzes zijn nu gelockt — niet
-terugrollen naar rol-gating of dubbele indicator zonder expliciete
-nieuwe vraag.
+op verzoek van de gebruiker.
+
+In **v1.6 fase B** is eigenaarschap losgekoppeld van aanvragerschap:
+TD/Diensthoofd "pikken op" via een knop, en pas dán krijgen ze de
+slider. De aanvrager blijft volledig zichtbaar in Details als
+oorspronkelijke indiener maar heeft géén bewerkrecht meer op de
+voortgang. Server-side gating op `PATCH /api/work-requests/[id]`
+controleert dit eveneens (de UI-only gating uit "Bekende beperkingen 1"
+is daarmee gedicht). Niet terugrollen naar aanvrager-gating of
+dubbele indicator zonder expliciete nieuwe vraag.
 
 ---
 

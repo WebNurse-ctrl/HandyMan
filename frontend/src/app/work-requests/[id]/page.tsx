@@ -11,10 +11,14 @@ import {
   CheckCircle2,
   Clock,
   DoorOpen,
+  HandHelping,
   LayoutGrid,
   MapPin,
   Tag,
   User as UserIcon,
+  UserCheck,
+  Users,
+  X,
 } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -23,7 +27,7 @@ import Avatar, { getInitials } from '@/components/ui/Avatar';
 import Spinner from '@/components/ui/Spinner';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
-import { Comment, WorkRequest } from '@/types';
+import { Comment, TechnicalStaffMember, WorkRequest } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
@@ -33,11 +37,17 @@ import { cn } from '@/lib/utils';
 //   • Details-kaart staat onder Voortgang en gebruikt iconen per veld.
 //   • Hoofdkolom (lg:col-span-2) bevat: Omschrijving + Feedback.
 //   • In de Voortgang-kaart staat één indicator: een slider voor de eigenaar
-//     (de aanvrager), een statische balk voor read-only kijkers.
+//     (= de TOEGEWEZEN behandelaar, workRequest.assignedTo.id === user.id),
+//     een statische balk voor read-only kijkers.
+//   • De aanvrager (workRequest.requestedBy) is GEEN eigenaar meer — sinds
+//     de pickup-flow is eigenaarschap losgekoppeld van aanvragerschap.
 // Verplaats deze blokken NIET zonder expliciete vraag van de gebruiker.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PROGRESS_STEPS = [0, 20, 40, 60, 80, 100] as const;
+
+const PICKUP_ROLES = ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'ADMIN', 'FACILITAIR_MANAGER'];
+const ADMIN_ROLES = ['ADMIN', 'FACILITAIR_MANAGER'];
 
 function snapToStep(value: number): number {
   return PROGRESS_STEPS.reduce((prev, curr) =>
@@ -71,8 +81,11 @@ export default function WorkRequestDetailPage() {
     retry: false,
   });
 
-  const isOwner =
-    !!user?.id && workRequest?.requestedBy?.id === user.id;
+  const userRole = user?.role ?? '';
+  const isAdmin = ADMIN_ROLES.includes(userRole);
+  const canPickup = PICKUP_ROLES.includes(userRole);
+  const isAssignee =
+    !!user?.id && !!workRequest?.assignedTo && workRequest.assignedTo.id === user.id;
 
   const { data: commentsData, isLoading: commentsLoading } = useQuery<{
     data: Comment[];
@@ -84,6 +97,7 @@ export default function WorkRequestDetailPage() {
 
   const [progressDraft, setProgressDraft] = useState<number>(0);
   const [commentDraft, setCommentDraft] = useState('');
+  const [reassignOpen, setReassignOpen] = useState(false);
 
   useEffect(() => {
     if (workRequest) setProgressDraft(workRequest.progress ?? 0);
@@ -99,6 +113,22 @@ export default function WorkRequestDetailPage() {
       toast.success('Voortgang bijgewerkt');
     },
     onError: () => toast.error('Bijwerken mislukt'),
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (assignedToId: string | null) =>
+      apiPatch<WorkRequest>(`/api/work-requests/${id}`, { assignedToId }),
+    onSuccess: (updated, variables) => {
+      queryClient.setQueryData(['work-request', id], updated);
+      queryClient.invalidateQueries({ queryKey: ['work-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setReassignOpen(false);
+      if (variables === null) toast.success('Aanvraag losgelaten');
+      else if (variables === user?.id) toast.success('Aanvraag opgepikt');
+      else toast.success('Aanvraag toegewezen');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err?.response?.data?.message ?? 'Toewijzen mislukt'),
   });
 
   const commentMutation = useMutation({
@@ -159,6 +189,10 @@ export default function WorkRequestDetailPage() {
   }
 
   const comments = commentsData?.data ?? [];
+  const canPickupNow =
+    canPickup && !workRequest.assignedTo && workRequest.status === 'INGEDIEND';
+  const canRelease = isAssignee || (isAdmin && !!workRequest.assignedTo);
+  const canForceAssign = isAdmin;
 
   return (
     <AppLayout>
@@ -310,7 +344,7 @@ export default function WorkRequestDetailPage() {
                 </span>
               </div>
 
-              {isOwner ? (
+              {isAssignee ? (
                 <>
                   <input
                     type="range"
@@ -378,9 +412,50 @@ export default function WorkRequestDetailPage() {
                     />
                   </div>
                   <p className="mt-4 text-xs text-muted-foreground">
-                    Alleen de aanvrager kan de voortgang bijwerken.
+                    {workRequest.assignedTo
+                      ? `Alleen ${workRequest.assignedTo.displayName} kan de voortgang bijwerken.`
+                      : 'Niemand pikt deze aanvraag op. De voortgang kan pas aangepast worden zodra iemand ze opneemt.'}
                   </p>
                 </>
+              )}
+
+              {/* ─── Pickup / Loslaten / Anders toewijzen ─── */}
+              {(canPickupNow || canRelease || canForceAssign) && (
+                <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+                  {canPickupNow && (
+                    <button
+                      type="button"
+                      onClick={() => assignMutation.mutate(user!.id)}
+                      disabled={assignMutation.isPending}
+                      className="btn-primary h-9 px-3"
+                    >
+                      <HandHelping className="h-4 w-4" />
+                      Oppikken
+                    </button>
+                  )}
+                  {canRelease && (
+                    <button
+                      type="button"
+                      onClick={() => assignMutation.mutate(null)}
+                      disabled={assignMutation.isPending}
+                      className="btn-ghost h-9 px-3"
+                    >
+                      <X className="h-4 w-4" />
+                      Loslaten
+                    </button>
+                  )}
+                  {canForceAssign && (
+                    <button
+                      type="button"
+                      onClick={() => setReassignOpen(true)}
+                      disabled={assignMutation.isPending}
+                      className="btn-secondary h-9 px-3"
+                    >
+                      <Users className="h-4 w-4" />
+                      Anders toewijzen
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -404,6 +479,28 @@ export default function WorkRequestDetailPage() {
                       </p>
                     </div>
                   </div>
+                </DetailRow>
+
+                <DetailRow icon={<UserCheck />} label="Toegewezen aan">
+                  {workRequest.assignedTo ? (
+                    <div className="flex items-center gap-2.5">
+                      <div className="avatar-fallback h-8 w-8 text-xs">
+                        {getInitials(workRequest.assignedTo.displayName)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-foreground">
+                          {workRequest.assignedTo.displayName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {workRequest.assignedTo.email}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      Nog niet opgepikt
+                    </span>
+                  )}
                 </DetailRow>
 
                 <DetailRow icon={<Building2 />} label="Campus">
@@ -456,6 +553,15 @@ export default function WorkRequestDetailPage() {
           </aside>
         </div>
       </div>
+
+      {reassignOpen && (
+        <ReassignDialog
+          currentAssigneeId={workRequest.assignedTo?.id ?? null}
+          onClose={() => setReassignOpen(false)}
+          onSelect={(uid) => assignMutation.mutate(uid)}
+          isSubmitting={assignMutation.isPending}
+        />
+      )}
     </AppLayout>
   );
 }
@@ -479,6 +585,96 @@ function DetailRow({
           {label}
         </dt>
         <dd className="mt-0.5 text-sm text-foreground">{children}</dd>
+      </div>
+    </div>
+  );
+}
+
+function ReassignDialog({
+  currentAssigneeId,
+  onClose,
+  onSelect,
+  isSubmitting,
+}: {
+  currentAssigneeId: string | null;
+  onClose: () => void;
+  onSelect: (userId: string) => void;
+  isSubmitting: boolean;
+}) {
+  const { data: staff = [], isLoading } = useQuery<TechnicalStaffMember[]>({
+    queryKey: ['technical-staff'],
+    queryFn: () => apiGet('/api/users/technical-staff'),
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-xl bg-card p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-foreground">
+            Aanvraag toewijzen
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Kies een behandelaar uit de technische dienst.
+        </p>
+
+        <div className="mt-4 max-h-72 space-y-1 overflow-y-auto">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Laden...</p>
+          ) : staff.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Geen technische medewerkers beschikbaar.
+            </p>
+          ) : (
+            staff.map((member) => {
+              const isCurrent = member.id === currentAssigneeId;
+              return (
+                <button
+                  key={member.id}
+                  type="button"
+                  disabled={isSubmitting || isCurrent}
+                  onClick={() => onSelect(member.id)}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors',
+                    isCurrent
+                      ? 'cursor-not-allowed bg-muted/40 opacity-60'
+                      : 'hover:bg-muted',
+                  )}
+                >
+                  <div className="avatar-fallback h-9 w-9 text-xs">
+                    {getInitials(member.displayName)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {member.displayName}
+                      {isCurrent && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          (huidig)
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {member.email} · {member.role.replace(/_/g, ' ').toLowerCase()}
+                    </p>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );

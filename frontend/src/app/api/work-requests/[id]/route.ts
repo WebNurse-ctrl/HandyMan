@@ -4,6 +4,26 @@ import { getUserIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
+const PICKUP_ROLES = ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'ADMIN', 'FACILITAIR_MANAGER'] as const;
+const ADMIN_ROLES = ['ADMIN', 'FACILITAIR_MANAGER'] as const;
+
+const detailInclude = {
+  requestedBy: {
+    select: { id: true, displayName: true, email: true, avatarUrl: true },
+  },
+  assignedTo: {
+    select: { id: true, displayName: true, email: true, avatarUrl: true, role: true },
+  },
+  campus: { select: { id: true, name: true, code: true } },
+  building: { select: { id: true, name: true, code: true } },
+  department: { select: { id: true, name: true, code: true } },
+  room: { select: { id: true, name: true, number: true } },
+  location: { select: { id: true, name: true, building: true, floor: true, room: true } },
+  category: { select: { id: true, name: true, icon: true, color: true } },
+  attachments: true,
+  _count: { select: { comments: true, attachments: true, tasks: true } },
+} as const;
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } },
@@ -11,19 +31,7 @@ export async function GET(
   try {
     const workRequest = await prisma.workRequest.findUnique({
       where: { id: params.id },
-      include: {
-        requestedBy: {
-          select: { id: true, displayName: true, email: true, avatarUrl: true },
-        },
-        campus: { select: { id: true, name: true, code: true } },
-        building: { select: { id: true, name: true, code: true } },
-        department: { select: { id: true, name: true, code: true } },
-        room: { select: { id: true, name: true, number: true } },
-        location: { select: { id: true, name: true, building: true, floor: true, room: true } },
-        category: { select: { id: true, name: true, icon: true, color: true } },
-        attachments: true,
-        _count: { select: { comments: true, attachments: true, tasks: true } },
-      },
+      include: detailInclude,
     });
 
     if (!workRequest) {
@@ -52,12 +60,102 @@ export async function PATCH(
     if (!userId) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, isActive: true },
+    });
+    if (!user || !user.isActive) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+
+    const current = await prisma.workRequest.findUnique({
+      where: { id: params.id },
+      select: { id: true, status: true, assignedToId: true, progress: true },
+    });
+    if (!current) {
+      return NextResponse.json(
+        { message: 'Werkaanvraag niet gevonden' },
+        { status: 404 },
+      );
+    }
 
     const body = await request.json();
-    const { progress, status, priority, rejectionReason } = body;
+    const { progress, status, priority, rejectionReason, assignedToId } = body;
 
     const data: Record<string, unknown> = {};
+    const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
 
+    // ── assignedToId: claim / release / force-assign ──
+    if (assignedToId !== undefined) {
+      const newAssignee: string | null =
+        assignedToId === null || assignedToId === '' ? null : String(assignedToId);
+      const oldAssignee = current.assignedToId;
+
+      if (newAssignee === null) {
+        // Release
+        if (oldAssignee && oldAssignee !== user.id && !isAdmin) {
+          return NextResponse.json(
+            { message: 'Alleen de eigenaar of een beheerder kan loslaten.' },
+            { status: 403 },
+          );
+        }
+        data.assignedToId = null;
+      } else if (newAssignee === user.id) {
+        // Claim by self
+        if (!(PICKUP_ROLES as readonly string[]).includes(user.role)) {
+          return NextResponse.json(
+            { message: 'Je rol kan deze aanvraag niet oppikken.' },
+            { status: 403 },
+          );
+        }
+        if (oldAssignee && oldAssignee !== user.id) {
+          return NextResponse.json(
+            { message: 'Aanvraag is al toegewezen aan iemand anders.' },
+            { status: 409 },
+          );
+        }
+        if (current.status !== 'INGEDIEND' && !oldAssignee) {
+          return NextResponse.json(
+            { message: 'Oppikken kan alleen voor aanvragen met status "Ingediend".' },
+            { status: 409 },
+          );
+        }
+        data.assignedToId = user.id;
+        if (current.status === 'INGEDIEND') {
+          data.status = 'IN_BEHANDELING';
+        }
+      } else {
+        // Force-assign to someone else
+        if (!isAdmin) {
+          return NextResponse.json(
+            { message: 'Alleen een beheerder kan iemand anders toewijzen.' },
+            { status: 403 },
+          );
+        }
+        const target = await prisma.user.findUnique({
+          where: { id: newAssignee },
+          select: { id: true, role: true, isActive: true },
+        });
+        if (!target || !target.isActive) {
+          return NextResponse.json(
+            { message: 'Toegewezen gebruiker niet gevonden.' },
+            { status: 404 },
+          );
+        }
+        if (!(PICKUP_ROLES as readonly string[]).includes(target.role)) {
+          return NextResponse.json(
+            { message: 'Toegewezen gebruiker mag geen werkaanvragen oppikken.' },
+            { status: 400 },
+          );
+        }
+        data.assignedToId = target.id;
+        if (current.status === 'INGEDIEND') {
+          data.status = 'IN_BEHANDELING';
+        }
+      }
+    }
+
+    // ── progress: server-side gating op assignedTo ──
     if (progress !== undefined) {
       const numericProgress = Number(progress);
       if (
@@ -70,23 +168,26 @@ export async function PATCH(
           { status: 400 },
         );
       }
+      const effectiveAssignee = (data.assignedToId as string | null | undefined) ?? current.assignedToId;
+      const mayEditProgress =
+        isAdmin || (effectiveAssignee !== null && effectiveAssignee === user.id);
+      if (!mayEditProgress) {
+        return NextResponse.json(
+          { message: 'Alleen de toegewezen behandelaar kan de voortgang bijwerken.' },
+          { status: 403 },
+        );
+      }
       data.progress = numericProgress;
 
       if (numericProgress === 100) {
         data.status = 'AFGEWERKT';
         data.resolvedAt = new Date();
-      } else if (numericProgress > 0) {
-        const current = await prisma.workRequest.findUnique({
-          where: { id: params.id },
-          select: { status: true },
-        });
-        if (current?.status === 'INGEDIEND') {
-          data.status = 'IN_BEHANDELING';
-        }
+      } else if (numericProgress > 0 && current.status === 'INGEDIEND' && !data.status) {
+        data.status = 'IN_BEHANDELING';
       }
     }
 
-    if (status !== undefined) {
+    if (status !== undefined && data.status === undefined) {
       data.status = status;
       if (status === 'AFGEWERKT') {
         data.resolvedAt = new Date();
@@ -107,18 +208,7 @@ export async function PATCH(
     const updated = await prisma.workRequest.update({
       where: { id: params.id },
       data,
-      include: {
-        requestedBy: {
-          select: { id: true, displayName: true, email: true, avatarUrl: true },
-        },
-        campus: { select: { id: true, name: true, code: true } },
-        building: { select: { id: true, name: true, code: true } },
-        department: { select: { id: true, name: true, code: true } },
-        room: { select: { id: true, name: true, number: true } },
-        location: { select: { id: true, name: true } },
-        category: { select: { id: true, name: true } },
-        _count: { select: { comments: true, attachments: true, tasks: true } },
-      },
+      include: detailInclude,
     });
 
     return NextResponse.json(updated);
