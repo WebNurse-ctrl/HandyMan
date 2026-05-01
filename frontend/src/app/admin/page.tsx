@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import {
+  Mail,
   Users,
   Building2,
   Tags,
@@ -11,36 +12,43 @@ import {
 import AppLayout from '@/components/layout/AppLayout';
 import PageHeader from '@/components/ui/PageHeader';
 import UsersTab from './_components/UsersTab';
+import InvitationsTab from './_components/InvitationsTab';
 import CampusesTab from './_components/CampusesTab';
 import CategoriesTab from './_components/CategoriesTab';
 import SettingsTab from './_components/SettingsTab';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
-type Tab = 'users' | 'campuses' | 'categories' | 'settings';
+type Tab = 'users' | 'invitations' | 'campuses' | 'categories' | 'settings';
 
-const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
-  { id: 'users', label: 'Gebruikers', icon: Users },
-  { id: 'campuses', label: 'Campussen', icon: Building2 },
-  { id: 'categories', label: 'Categorieën', icon: Tags },
-  { id: 'settings', label: 'Instellingen', icon: SettingsIcon },
+const TABS: { id: Tab; label: string; icon: LucideIcon; roles: string[] }[] = [
+  { id: 'users', label: 'Gebruikers', icon: Users, roles: ['ADMIN', 'FACILITAIR_MANAGER', 'DIENSTHOOFD'] },
+  { id: 'invitations', label: 'Uitnodigingen', icon: Mail, roles: ['ADMIN', 'FACILITAIR_MANAGER', 'DIENSTHOOFD'] },
+  { id: 'campuses', label: 'Campussen', icon: Building2, roles: ['ADMIN', 'FACILITAIR_MANAGER'] },
+  { id: 'categories', label: 'Categorieën', icon: Tags, roles: ['ADMIN', 'FACILITAIR_MANAGER'] },
+  { id: 'settings', label: 'Instellingen', icon: SettingsIcon, roles: ['ADMIN', 'FACILITAIR_MANAGER'] },
 ];
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>('users');
+  const { user } = useAuth();
+  const visibleTabs = TABS.filter((t) => !user || t.roles.includes(user.role));
+  const [tab, setTab] = useState<Tab>(visibleTabs[0]?.id ?? 'users');
+
+  const activeId = visibleTabs.some((t) => t.id === tab) ? tab : visibleTabs[0]?.id;
 
   return (
     <AppLayout>
       <div className="space-y-6">
         <PageHeader
           title="Beheer"
-          description="Campussen, categorieën, instellingen en gebruikersbeheer"
+          description="Gebruikers, uitnodigingen en organisatiestructuur"
         />
 
         <div className="border-b border-border">
           <nav className="flex flex-wrap gap-1">
-            {TABS.map((t) => {
+            {visibleTabs.map((t) => {
               const Icon = t.icon;
-              const active = tab === t.id;
+              const active = activeId === t.id;
               return (
                 <button
                   key={t.id}
@@ -65,10 +73,11 @@ export default function AdminPage() {
         </div>
 
         <div className="animate-fade-in">
-          {tab === 'users' && <UsersTab />}
-          {tab === 'campuses' && <CampusesTab />}
-          {tab === 'categories' && <CategoriesTab />}
-          {tab === 'settings' && <SettingsTab />}
+          {activeId === 'users' && <UsersTab />}
+          {activeId === 'invitations' && <InvitationsTab />}
+          {activeId === 'campuses' && <CampusesTab />}
+          {activeId === 'categories' && <CategoriesTab />}
+          {activeId === 'settings' && <SettingsTab />}
         </div>
       </div>
     </AppLayout>

@@ -1,15 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import Spinner from '@/components/ui/Spinner';
 import { useAuth } from '@/hooks/useAuth';
 
+const MEDEWERKER_ALLOWED_PREFIXES = ['/work-requests', '/profile'];
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { isAuthenticated, isLoading, fetchUser } = useAuth();
+  const pathname = usePathname();
+  const { isAuthenticated, isLoading, fetchUser, user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -21,6 +24,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.push('/login');
     }
   }, [isLoading, isAuthenticated, router]);
+
+  // Profiel niet vervolledigd → naar /profile/complete
+  useEffect(() => {
+    if (
+      user &&
+      user.profileCompleted === false &&
+      pathname &&
+      !pathname.startsWith('/profile/complete')
+    ) {
+      router.replace('/profile/complete');
+    }
+  }, [user, pathname, router]);
+
+  // MEDEWERKER mag alleen werkaanvragen + profiel
+  useEffect(() => {
+    if (!user || !pathname) return;
+    if (
+      user.role === 'MEDEWERKER' &&
+      !MEDEWERKER_ALLOWED_PREFIXES.some((p) => pathname.startsWith(p))
+    ) {
+      router.replace('/work-requests');
+    }
+  }, [user, pathname, router]);
 
   if (isLoading) {
     return (

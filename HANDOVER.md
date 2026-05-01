@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.5 (+ v1.6 fundament in progress)
+# HandyMan - Project Handover Document v1.6
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -333,6 +333,10 @@ Mutaties invalideren expliciet `['work-requests']`, `['dashboard']`, `['work-req
 | `AZURE_AD_CLIENT_ID` | App registration client ID |
 | `AZURE_AD_CLIENT_SECRET` | App registration secret |
 | `AZURE_AD_REDIRECT_URI` | `https://handyman-eta-mocha.vercel.app/api/auth/callback` |
+| `AUTH_SECRET` | **v1.6** HS256 JWT-signing key (≥ 32 tekens). Bv. `openssl rand -base64 48`. |
+| `RESEND_API_KEY` | **v1.6 fase C** API-key van Resend voor uitnodigingsmails |
+| `MAIL_FROM` | **v1.6 fase C** Verzendadres bv. `HandyMan <noreply@example.be>` |
+| `APP_URL` | **v1.6 fase C** Publieke URL voor accept-invite links |
 
 ## Database Migraties
 
@@ -462,12 +466,111 @@ END $$;
 
 Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elke deploy automatisch gesynchroniseerd. `prisma db push` zonder `--accept-data-loss` faalt bij destructieve wijzigingen (bewust) zodat je stille dataverlies voorkomt. Zorg dat `DIRECT_URL` in Vercel gedefinieerd is, want `prisma db push` vereist een directe connectie (poort 5432, niet de PgBouncer-pooler op 6543).
 
-## Wat is in voorbereiding voor v1.6 — fase B (pickup-flow)
+## Wat is geïmplementeerd in v1.6
 
-> **Eigenaarschap losgekoppeld van aanvragerschap.** TD en Diensthoofd
-> "pikken aanvragen op" via een knop; pas dán krijgen ze het bewerkrecht
-> op de voortgangsslider. De aanvrager blijft altijd zichtbaar in
-> Details, maar heeft géén bewerkrecht meer op de voortgang.
+v1.6 brengt **gebruikersbeheer** (uitnodigingen via e-mail), **scope-gebaseerde
+toegang** tot werkaanvragen, **MEDEWERKER-restricties** en de **pickup-flow**
+voor de technische dienst. De wijzigingen zijn in drie sequentiële fasen
+uitgerold (A → B → C); zie de gedetailleerde secties hieronder voor elke fase.
+
+### v1.6 fase C — invitation-flow + scope-RBAC
+
+**Auth — co-existentie van Microsoft Entra ID SSO en password-login:**
+
+- `POST /api/auth/password-login` (e-mail + wachtwoord → JWT). Rate-limiting
+  via Vercel/edge nog niet geïmplementeerd.
+- Login-pagina toont beide opties (Microsoft 365 boven, e-mail/wachtwoord
+  onder).
+
+**Invitation-flow:**
+
+- `POST /api/invitations` (ADMIN/FM/DH) maakt token + verstuurt mail via
+  Resend. E-mail-template in `frontend/src/lib/mail.ts` met HandyMan
+  emerald/cyan gradient header.
+- `GET /api/invitations` — lijst (alle uitnodigingen) voor ADMIN/FM/DH.
+- `DELETE /api/invitations/[id]` — intrekken (alleen niet-geaccepteerde).
+- `GET /api/invitations/lookup?token=` — publiek; geeft email +
+  inviterName + valid-status terug.
+- `POST /api/invitations/accept` — publiek; ontvangt `{ token, password }`,
+  hasht wachtwoord (bcrypt 12 rounds), maakt User of activeert bestaande
+  User, markeert invitation, fired notificaties (USER_REGISTERED) naar alle
+  actieve ADMIN/FM/DH. Wachtwoord-minimum: 10 tekens.
+- `POST /api/auth/complete-profile` — vereist auth; vult firstName/
+  lastName/phone/jobTitle/department aan, zet `profileCompleted=true`.
+
+**Pagina's:**
+
+- `/accept-invite/[token]/page.tsx` — wachtwoord instellen + automatisch
+  inloggen + redirect naar `/profile/complete` (of werkaanvragen als al
+  voltooid).
+- `/profile/complete/page.tsx` — eerste-login profielformulier; geblokkeerde
+  redirect via AppLayout zolang `profileCompleted=false`.
+
+**Scope-filter (campus-gebaseerde toegang):**
+
+- `users.scope_campus_id` (uit fase A) bepaalt of een gebruiker alleen
+  werkaanvragen van één campus ziet of de volledige organisatie.
+- Toegepast op `GET /api/work-requests` (lijst), `GET /api/work-requests/[id]`,
+  `PATCH /api/work-requests/[id]`, `GET/POST /api/work-requests/[id]/comments`.
+- Niet-MEDEWERKER met `scopeCampusId !== null` ziet alleen aanvragen van die
+  campus. Buiten-scope-id-lookups krijgen 404 (geen leak).
+
+**MEDEWERKER-restrictie:**
+
+- API-niveau: MEDEWERKER ziet alléén werkaanvragen waar `requestedById ===
+  user.id`. Andere routes geven 403 (`/api/users`, `/api/users/technical-staff`,
+  `/api/invitations*`, `/api/users/[id]*`).
+- UI-niveau: sidebar verbergt Dashboard/Taken/Projecten/Aankopen/Beheer.
+  AppLayout redirect MEDEWERKER van álle paden behalve `/work-requests/*`
+  en `/profile/*` terug naar `/work-requests`.
+- Resultaat: MEDEWERKER kan alléén nieuwe aanvragen indienen + eigen
+  aanvragen bekijken. Niets anders.
+
+**Admin UI — nieuwe Uitnodigingen-tab:**
+
+- `/admin` toont nu vijf tabs (rol-gefilterd):
+  - **Gebruikers** (DH/FM/ADMIN) — scope-toewijzing toegevoegd: select
+    "Volledige organisatie" of een campus per gebruiker.
+  - **Uitnodigingen** (DH/FM/ADMIN) — formulier (e-mail + voorgestelde
+    rol + scope) + lijst lopende uitnodigingen (intrekken-knop) + lijst
+    geaccepteerde uitnodigingen.
+  - **Campussen, Categorieën, Instellingen** (FM/ADMIN, ongewijzigd).
+- DH ziet dus enkel Gebruikers + Uitnodigingen.
+- Sidebar `Beheer`-link is uitgebreid naar DIENSTHOOFD.
+
+**Notificaties:**
+
+- Nieuwe `NotificationType` enum-waarde `USER_REGISTERED` en
+  `WORK_REQUEST_ASSIGNED` (laatste gereserveerd, nog niet gebruikt).
+- Bij accept-invite worden notificaties aangemaakt voor alle actieve
+  ADMIN/FM/DH met titel "Nieuwe medewerker aangemeld" en `entityType=user`,
+  `entityId=user.id`. De Notifications-bell pikt deze automatisch op.
+
+**Nieuwe env-vars op Vercel (vereist voor fase C):**
+
+| Variabele | Beschrijving |
+|---|---|
+| `RESEND_API_KEY` | API-key voor het versturen van uitnodigingsmails |
+| `MAIL_FROM` | Verzendadres in formaat `HandyMan <noreply@example.be>` |
+| `APP_URL` | Publieke URL (bv. `https://handyman-eta-mocha.vercel.app`) — wordt gebruikt om de accept-invite link te bouwen |
+
+**Migratie-SQL (v1.6 fase C):** alleen één enum-uitbreiding nodig:
+
+```sql
+ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'WORK_REQUEST_ASSIGNED';
+ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'USER_REGISTERED';
+```
+
+> Belangrijk: in Postgres mag `ALTER TYPE ... ADD VALUE` niet binnen een
+> transactie draaien. Voer beide statements los uit (Supabase SQL Editor
+> doet dit automatisch correct).
+
+### v1.6 fase B — pickup-flow
+
+**Eigenaarschap losgekoppeld van aanvragerschap.** TD en Diensthoofd
+"pikken aanvragen op" via een knop; pas dán krijgen ze het bewerkrecht
+op de voortgangsslider. De aanvrager blijft altijd zichtbaar in
+Details, maar heeft géén bewerkrecht meer op de voortgang.
 
 ### API
 
@@ -510,7 +613,7 @@ meer `requestedBy`. Aanvrager blijft zichtbaar in Details. Pickup-knoppen
 zijn nu onderdeel van de Werkvooruitgang-kaart en mogen daar niet
 verdwijnen.
 
-## Wat is in voorbereiding voor v1.6 — fase A (auth-fundament)
+### v1.6 fase A — auth-fundament
 
 > Dit is een **infrastructuur-commit** zonder UI-wijzigingen. De feature
 > wordt in drie fases uitgerold (A → B → C). Fase A levert het schema en

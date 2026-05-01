@@ -1,19 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getUserIdFromRequest } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
+
+async function loadAccessibleRequest(
+  id: string,
+  ctx: { userId: string; isMedewerker: boolean; scopeCampusId: string | null },
+) {
+  const wr = await prisma.workRequest.findUnique({
+    where: { id },
+    select: { id: true, requestedById: true, campusId: true },
+  });
+  if (!wr) return null;
+  if (ctx.isMedewerker && wr.requestedById !== ctx.userId) return null;
+  if (!ctx.isMedewerker && ctx.scopeCampusId && wr.campusId !== ctx.scopeCampusId) return null;
+  return wr;
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } },
 ) {
   try {
-    const exists = await prisma.workRequest.findUnique({
-      where: { id: params.id },
-      select: { id: true },
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
+    const { user, isMedewerker, scopeCampusId } = auth.ctx;
+
+    const wr = await loadAccessibleRequest(params.id, {
+      userId: user.id,
+      isMedewerker,
+      scopeCampusId,
     });
-    if (!exists) {
+    if (!wr) {
       return NextResponse.json(
         { message: 'Werkaanvraag niet gevonden' },
         { status: 404 },
@@ -45,10 +64,9 @@ export async function POST(
   { params }: { params: { id: string } },
 ) {
   try {
-    const userId = await getUserIdFromRequest(request);
-    if (!userId) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
+    const { user, isMedewerker, scopeCampusId } = auth.ctx;
 
     const body = await request.json();
     const content = typeof body?.content === 'string' ? body.content.trim() : '';
@@ -59,11 +77,12 @@ export async function POST(
       );
     }
 
-    const workRequest = await prisma.workRequest.findUnique({
-      where: { id: params.id },
-      select: { id: true },
+    const wr = await loadAccessibleRequest(params.id, {
+      userId: user.id,
+      isMedewerker,
+      scopeCampusId,
     });
-    if (!workRequest) {
+    if (!wr) {
       return NextResponse.json(
         { message: 'Werkaanvraag niet gevonden' },
         { status: 404 },
@@ -73,7 +92,7 @@ export async function POST(
     const comment = await prisma.comment.create({
       data: {
         content,
-        userId,
+        userId: user.id,
         workRequestId: params.id,
       },
       include: {

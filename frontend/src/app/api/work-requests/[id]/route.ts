@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getUserIdFromRequest } from '@/lib/auth';
+import { ADMIN_ROLES, PICKUP_ROLES, requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
-
-const PICKUP_ROLES = ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'ADMIN', 'FACILITAIR_MANAGER'] as const;
-const ADMIN_ROLES = ['ADMIN', 'FACILITAIR_MANAGER'] as const;
 
 const detailInclude = {
   requestedBy: {
@@ -29,12 +26,31 @@ export async function GET(
   { params }: { params: { id: string } },
 ) {
   try {
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
+    const { user, scopeCampusId, isMedewerker } = auth.ctx;
+
     const workRequest = await prisma.workRequest.findUnique({
       where: { id: params.id },
       include: detailInclude,
     });
 
     if (!workRequest) {
+      return NextResponse.json(
+        { message: 'Werkaanvraag niet gevonden' },
+        { status: 404 },
+      );
+    }
+
+    // RBAC + scope: MEDEWERKER mag alleen eigen aanvragen zien;
+    // niet-MEDEWERKER met campus-scope alleen die campus.
+    if (isMedewerker && workRequest.requestedById !== user.id) {
+      return NextResponse.json(
+        { message: 'Werkaanvraag niet gevonden' },
+        { status: 404 },
+      );
+    }
+    if (!isMedewerker && scopeCampusId && workRequest.campusId !== scopeCampusId) {
       return NextResponse.json(
         { message: 'Werkaanvraag niet gevonden' },
         { status: 404 },
@@ -56,23 +72,31 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ) {
   try {
-    const userId = await getUserIdFromRequest(request);
-    if (!userId) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, role: true, isActive: true },
-    });
-    if (!user || !user.isActive) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
+    const { user, isAdmin, isMedewerker, scopeCampusId } = auth.ctx;
 
     const current = await prisma.workRequest.findUnique({
       where: { id: params.id },
-      select: { id: true, status: true, assignedToId: true, progress: true },
+      select: { id: true, status: true, assignedToId: true, progress: true, campusId: true, requestedById: true },
     });
     if (!current) {
+      return NextResponse.json(
+        { message: 'Werkaanvraag niet gevonden' },
+        { status: 404 },
+      );
+    }
+
+    // Toegang: MEDEWERKER kan alleen eigen aanvraag wijzigen (in praktijk
+    // alleen comments — progress/assign zijn voor TD/DH); scope-gebruikers
+    // alleen binnen hun campus.
+    if (isMedewerker && current.requestedById !== user.id) {
+      return NextResponse.json(
+        { message: 'Werkaanvraag niet gevonden' },
+        { status: 404 },
+      );
+    }
+    if (!isMedewerker && scopeCampusId && current.campusId !== scopeCampusId) {
       return NextResponse.json(
         { message: 'Werkaanvraag niet gevonden' },
         { status: 404 },
@@ -83,7 +107,6 @@ export async function PATCH(
     const { progress, status, priority, rejectionReason, assignedToId } = body;
 
     const data: Record<string, unknown> = {};
-    const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
 
     // ── assignedToId: claim / release / force-assign ──
     if (assignedToId !== undefined) {

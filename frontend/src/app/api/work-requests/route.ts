@@ -1,24 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { getUserIdFromRequest } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
+    const { user, scopeCampusId, isMedewerker } = auth.ctx;
+
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const status = searchParams.get('status') || undefined;
     const priority = searchParams.get('priority') || undefined;
-    const campusId = searchParams.get('campusId') || undefined;
+    const campusIdFilter = searchParams.get('campusId') || undefined;
     const search = searchParams.get('search') || undefined;
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {};
-    if (status) where.status = status;
-    if (priority) where.priority = priority;
-    if (campusId) where.campusId = campusId;
+    const where: Prisma.WorkRequestWhereInput = {};
+    if (status) where.status = status as Prisma.WorkRequestWhereInput['status'];
+    if (priority) where.priority = priority as Prisma.WorkRequestWhereInput['priority'];
+
+    // MEDEWERKER ziet alleen eigen aanvragen.
+    if (isMedewerker) {
+      where.requestedById = user.id;
+    } else if (scopeCampusId) {
+      // Niet-MEDEWERKER met campus-scope ziet alleen die campus.
+      where.campusId = scopeCampusId;
+    }
+
+    if (campusIdFilter) {
+      // Expliciete filter mag niet boven scope uitgaan.
+      if (scopeCampusId && campusIdFilter !== scopeCampusId) {
+        // Negeer filter buiten scope.
+      } else {
+        where.campusId = campusIdFilter;
+      }
+    }
+
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -57,15 +79,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const userId = await getUserIdFromRequest(request);
-    if (!userId) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.isActive) {
-      return NextResponse.json({ message: 'User not found' }, { status: 401 });
-    }
+    const auth = await requireAuth(request);
+    if (!auth.ok) return auth.response;
+    const { user } = auth.ctx;
 
     const body = await request.json();
     const {
@@ -80,7 +96,6 @@ export async function POST(request: NextRequest) {
       priority,
     } = body;
 
-    // Generate request number
     const year = new Date().getFullYear();
     const count = await prisma.workRequest.count({
       where: {

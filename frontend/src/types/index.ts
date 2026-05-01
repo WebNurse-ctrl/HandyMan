@@ -18,6 +18,21 @@ export interface User {
   role: UserRole;
   avatarUrl?: string;
   lastLoginAt?: string;
+  profileCompleted?: boolean;
+  scopeCampusId?: string | null;
+  scopeCampus?: { id: string; name: string } | null;
+}
+
+export interface UserInvitation {
+  id: string;
+  email: string;
+  suggestedRole: UserRole;
+  scopeCampusId?: string | null;
+  scopeCampus?: { id: string; name: string } | null;
+  invitedBy: { id: string; displayName: string; email: string };
+  expiresAt: string;
+  acceptedAt?: string | null;
+  createdAt: string;
 }
 
 // Work Request types

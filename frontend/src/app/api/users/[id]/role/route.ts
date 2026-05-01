@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { INVITE_ROLES, requireRole } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,9 @@ export async function PATCH(
   { params }: { params: { id: string } },
 ) {
   try {
+    const auth = await requireRole(request, INVITE_ROLES);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const { role } = body as { role: string };
 

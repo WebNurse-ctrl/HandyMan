@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { INVITE_ROLES, requireRole } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireRole(request, INVITE_ROLES);
+    if (!auth.ok) return auth.response;
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -34,6 +37,8 @@ export async function GET(request: NextRequest) {
           role: true,
           avatarUrl: true,
           lastLoginAt: true,
+          scopeCampusId: true,
+          scopeCampus: { select: { id: true, name: true } },
         },
       }),
       prisma.user.count({ where }),

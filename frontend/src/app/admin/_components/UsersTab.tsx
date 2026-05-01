@@ -7,7 +7,7 @@ import { Trash2 } from 'lucide-react';
 import DataTable from '@/components/ui/DataTable';
 import Avatar from '@/components/ui/Avatar';
 import { apiGet, apiPatch, apiDelete } from '@/lib/api';
-import { User, PaginatedResponse } from '@/types';
+import { Campus, User, PaginatedResponse } from '@/types';
 
 const roleLabels: Record<string, string> = {
   MEDEWERKER: 'Medewerker',
@@ -26,16 +26,26 @@ export default function UsersTab() {
     queryFn: () => apiGet('/api/users', { page, limit: 50 }),
   });
 
-  const updateRole = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: string }) =>
-      apiPatch(`/api/users/${id}/role`, { role }),
+  const { data: campuses = [] } = useQuery<Campus[]>({
+    queryKey: ['campuses'],
+    queryFn: () => apiGet('/api/campuses'),
+  });
+
+  const updateUser = useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: { role?: string; scopeCampusId?: string | null };
+    }) => apiPatch(`/api/users/${id}`, patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast.success('Rol succesvol bijgewerkt');
+      toast.success('Gebruiker bijgewerkt');
     },
     onError: (error: unknown) => {
       const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Kon rol niet bijwerken');
+      toast.error(err.response?.data?.message || 'Bijwerken mislukt');
     },
   });
 
@@ -76,25 +86,44 @@ export default function UsersTab() {
       ),
     },
     {
-      key: 'department',
-      label: 'Afdeling',
-      render: (item: User) => (
-        <span className="text-muted-foreground">{item.department || '—'}</span>
-      ),
-    },
-    {
       key: 'role',
       label: 'Rol',
       render: (item: User) => (
         <select
           value={item.role}
-          onChange={(e) => updateRole.mutate({ id: item.id, role: e.target.value })}
-          disabled={updateRole.isPending}
-          className="input h-9 max-w-[210px] py-0 text-sm"
+          onChange={(e) =>
+            updateUser.mutate({ id: item.id, patch: { role: e.target.value } })
+          }
+          disabled={updateUser.isPending}
+          className="input h-9 max-w-[200px] py-0 text-sm"
         >
           {Object.entries(roleLabels).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
+            </option>
+          ))}
+        </select>
+      ),
+    },
+    {
+      key: 'scope',
+      label: 'Toegang tot',
+      render: (item: User) => (
+        <select
+          value={item.scopeCampusId ?? ''}
+          onChange={(e) =>
+            updateUser.mutate({
+              id: item.id,
+              patch: { scopeCampusId: e.target.value || null },
+            })
+          }
+          disabled={updateUser.isPending}
+          className="input h-9 max-w-[220px] py-0 text-sm"
+        >
+          <option value="">Volledige organisatie</option>
+          {campuses.map((c) => (
+            <option key={c.id} value={c.id}>
+              Campus {c.name}
             </option>
           ))}
         </select>

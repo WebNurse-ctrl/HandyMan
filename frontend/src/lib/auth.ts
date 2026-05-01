@@ -1,8 +1,8 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
-import type { User } from '@prisma/client';
+import type { User, UserRole } from '@prisma/client';
 
 const SESSION_TTL = '30d';
 const ALG = 'HS256';
@@ -53,4 +53,68 @@ export async function hashPassword(plain: string): Promise<string> {
 
 export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
+}
+
+// ─── RBAC + scope helpers ─────────────────────────────────────────────────────
+
+export type RoleSet = readonly UserRole[];
+
+export const ALL_ROLES: RoleSet = [
+  'MEDEWERKER',
+  'TECHNISCHE_DIENST',
+  'DIENSTHOOFD',
+  'FACILITAIR_MANAGER',
+  'ADMIN',
+];
+
+export const ADMIN_ROLES: RoleSet = ['ADMIN', 'FACILITAIR_MANAGER'];
+export const INVITE_ROLES: RoleSet = ['ADMIN', 'FACILITAIR_MANAGER', 'DIENSTHOOFD'];
+export const PICKUP_ROLES: RoleSet = [
+  'TECHNISCHE_DIENST',
+  'DIENSTHOOFD',
+  'ADMIN',
+  'FACILITAIR_MANAGER',
+];
+
+export interface AuthContext {
+  user: User;
+  isAdmin: boolean;
+  isMedewerker: boolean;
+  scopeCampusId: string | null;
+}
+
+export function unauthorized(message = 'Unauthorized') {
+  return NextResponse.json({ message }, { status: 401 });
+}
+
+export function forbidden(message = 'Geen toegang') {
+  return NextResponse.json({ message }, { status: 403 });
+}
+
+export async function requireAuth(request: NextRequest): Promise<
+  { ok: true; ctx: AuthContext } | { ok: false; response: NextResponse }
+> {
+  const user = await getUserFromRequest(request);
+  if (!user) return { ok: false, response: unauthorized() };
+  return {
+    ok: true,
+    ctx: {
+      user,
+      isAdmin: ADMIN_ROLES.includes(user.role),
+      isMedewerker: user.role === 'MEDEWERKER',
+      scopeCampusId: user.scopeCampusId ?? null,
+    },
+  };
+}
+
+export async function requireRole(
+  request: NextRequest,
+  roles: RoleSet,
+): Promise<{ ok: true; ctx: AuthContext } | { ok: false; response: NextResponse }> {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth;
+  if (!roles.includes(auth.ctx.user.role)) {
+    return { ok: false, response: forbidden() };
+  }
+  return auth;
 }

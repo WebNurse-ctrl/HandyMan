@@ -30,7 +30,7 @@ const navigation: NavItem[] = [
     name: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
-    roles: null,
+    roles: ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'FACILITAIR_MANAGER', 'ADMIN'],
     section: 'workspace',
   },
   {
@@ -65,7 +65,7 @@ const navigation: NavItem[] = [
     name: 'Beheer',
     href: '/admin',
     icon: Settings2,
-    roles: ['FACILITAIR_MANAGER', 'ADMIN'],
+    roles: ['DIENSTHOOFD', 'FACILITAIR_MANAGER', 'ADMIN'],
     section: 'beheer',
   },
 ];
