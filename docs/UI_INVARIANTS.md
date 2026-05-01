@@ -36,11 +36,26 @@ het begin van elke sessie.
 
 1. **Voortgangsindicator (`Werkvooruitgang`-kaart) staat in de RECHTER
    zijbalk**, bovenaan. Niet in de hoofdkolom, niet onder de omschrijving.
-2. **Details-kaart bevat een icoon per veld** (`User`, `Building2`,
-   `MapPin`, `Tag`, `Clock`, `CheckCircle2`). De icoon staat in een 36×36
-   afgeronde tegel met `bg-muted text-muted-foreground` links van label+waarde.
-3. **Hoofdkolom** bevat enkel: Omschrijving + Feedback (comments).
-4. De `<aside>` met de zijbalk gebruikt `space-y-6` zodat de twee kaarten
+2. **De Werkvooruitgang-kaart toont exact ÉÉN indicator per state**:
+   - Voor de **eigenaar van de werkaanvraag** (= de aanvrager,
+     `workRequest.requestedBy.id === user.id`): alleen de slider (range 0–100,
+     step 20) plus de stap-knoppen. Geen separate gevulde balk erboven.
+   - Voor **alle anderen** (read-only kijkers): alleen een gevulde balk met
+     het percentage. Geen slider, geen stap-knoppen.
+   - Beide tegelijk tonen (statische balk + slider tegelijkertijd) is een
+     regressie en mag NIET. De rol-gebaseerde gating (`canEdit` o.b.v.
+     `user.role !== 'MEDEWERKER'`) is afgeschaft — gebruik eigenaarschap.
+3. **Details-kaart bevat een icoon per veld** (`User`, `Building2`,
+   `Building`, `LayoutGrid`, `DoorOpen`, `MapPin`, `Tag`, `Clock`,
+   `CheckCircle2`). De icoon staat in een 36×36 afgeronde tegel met
+   `bg-muted text-muted-foreground` links van label+waarde.
+4. **Volledige locatiehiërarchie in Details**: naast Campus toont de kaart
+   ook **Gebouw**, **Afdeling** en **Kamer** (elk alléén wanneer aan de
+   aanvraag toegekend). Mapping: `Building` voor gebouw, `LayoutGrid` voor
+   afdeling, `DoorOpen` voor kamer. De legacy `location` (tekstlocatie)
+   blijft optioneel onderaan met `MapPin` voor backward compatibility.
+5. **Hoofdkolom** bevat enkel: Omschrijving + Feedback (comments).
+6. De `<aside>` met de zijbalk gebruikt `space-y-6` zodat de twee kaarten
    netjes onder elkaar staan met dezelfde gap als de hoofdkolom.
 
 ### Waarom
@@ -49,6 +64,12 @@ De gebruiker heeft deze layout in een eerdere sessie expliciet zo
 ingericht. Tijdens de grote UI-overhaul (commit `a9e2039`) werd deze
 indeling per ongeluk teruggerold; in de fix zijn de blokken hersteld
 plus een lock-comment in de pagina-source geplaatst.
+
+In v1.5 (commit `1092232`) is bovendien de dubbele voortgangsindicator
+weggewerkt en is het bewerkrecht herrouteerd van rol naar eigenaarschap
+op verzoek van de gebruiker. Deze keuzes zijn nu gelockt — niet
+terugrollen naar rol-gating of dubbele indicator zonder expliciete
+nieuwe vraag.
 
 ---
 

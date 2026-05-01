@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.4
+# HandyMan - Project Handover Document v1.5
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -13,9 +13,17 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Microsoft Entra ID (Azure AD) SSO
 - **Repo**: github.com/WebNurse-ctrl/HandyMan
-- **Actieve hoofdbranch**: `main` — bevat v1.0 → v1.4 (incl. v1.3 admin beheer + v1.4 detailpagina)
-- **v1.3 feature branch**: `claude/admin-campus-management-U7E1t` (gemerged in main)
-- **v1.4 feature branch**: `claude/job-request-details-ZBKGT` (gemerged in main)
+- **Vercel deploy-branch (Production)**: `claude/modernize-handyman-ui-EEzjx` — élke
+  push hierheen triggert een productie-deploy. **Werk standaard op deze branch**
+  tenzij expliciet anders gevraagd. `main` loopt achter en is GEEN deploy-bron.
+- **v1.5 commits op deploy-branch**:
+  - `1092232` fix(work-requests): één voortgangsindicator + locatiehiërarchie op detail
+  - `86c0274` fix(work-requests): restore locked detail-page layout + lock invariants
+  - `a9e2039` feat(ui): modernize HandyMan with Apex-style emerald theme + dark mode
+- **Eerdere feature branches** (merged of gestaged elders, NIET de deploy-bron):
+  - `claude/admin-campus-management-U7E1t` (v1.3 admin beheer)
+  - `claude/job-request-details-ZBKGT` (v1.4 detailpagina, basis)
+  - `claude/merge-main-branch-OIMCi` (alternatieve v1.4.x fix — niet gemerged)
 
 ## Tech Stack
 
@@ -267,20 +275,36 @@ Cascading selects in `/work-requests/new`:
 
 De waardes worden verstuurd als `buildingId`, `departmentId`, `roomId` naar `/api/work-requests` POST.
 
-### Werkaanvraag detailpagina (v1.4)
+### Werkaanvraag detailpagina (v1.4 — bijgewerkt in v1.5)
 
-Route: `/work-requests/[id]` — opgebouwd uit drie kaarten:
+Route: `/work-requests/[id]` — twee-koloms layout (zie ook `docs/UI_INVARIANTS.md` §1):
+
+**Hoofdkolom (`lg:col-span-2`)**:
 
 1. **Omschrijving** met optioneel een weigeringsreden.
-2. **Werkvooruitgang**:
-   - Range-input `min=0 max=100 step=20` — de slider rast vast op de stappen 0, 20, 40, 60, 80, 100.
-   - Klikbare stap-knoppen onder de balk voor directe selectie.
-   - Kleur van de balk: grijs (0) → oranje (≥20) → blauw (≥60) → groen (=100).
-   - Rol-gating: alleen niet-MEDEWERKER rollen kunnen de waarde bijwerken. De server verifieert geen rol (conform de huidige RBAC-status) — gating is enkel UI-niveau.
-   - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
-3. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
+2. **Feedback**: lijst van comments (chronologisch) + inline textarea om een nieuwe toe te voegen. Iedere aangemelde gebruiker kan posten.
 
-Bijkomende side-panel met metadata (aanvrager, campus, locatiehiërarchie, categorie, timestamps, `resolvedAt`).
+**Rechterzijbalk (`lg:col-span-1`)**:
+
+3. **Werkvooruitgang** — toont **exact één indicator**:
+   - **Eigenaar van de werkaanvraag** (`requestedBy.id === user.id`): range-slider `min=0 max=100 step=20` met klikbare stap-knoppen (0/20/40/60/80/100) en Opslaan/Annuleren controls. **Geen** statische gevulde balk erboven.
+   - **Read-only kijkers** (alle anderen): alléén een gevulde balk + percentage. Geen slider, geen stap-knoppen. Tekst onderaan: *"Alleen de aanvrager kan de voortgang bijwerken."*
+   - Kleur van de balk: grijs (0) → oranje (≥20) → blauw (≥60) → groen (=100).
+   - **Eigenaarschap**, niet rol, bepaalt het bewerkrecht. De vroegere `canEdit = user?.role !== 'MEDEWERKER'` is afgeschaft.
+   - Server-side gating ontbreekt nog (de PATCH `/api/work-requests/[id]` accepteert een progress-update van iedere geldige token — zie Bekende Beperkingen §1).
+   - Automatische statusovergang: bij `progress=100` → status `AFGEWERKT` + `resolvedAt`; bij `progress>0` op een `INGEDIEND` aanvraag → status `IN_BEHANDELING`.
+4. **Details** met iconen per veld:
+   - `User` — Aanvrager (avatar + naam + email)
+   - `Building2` — Campus (altijd getoond)
+   - `Building` — Gebouw (alléén als toegekend)
+   - `LayoutGrid` — Afdeling (alléén als toegekend)
+   - `DoorOpen` — Kamer (alléén als toegekend; toont `nummer · naam`)
+   - `MapPin` — Legacy `location` (alléén als ingevuld, voor backward compatibility)
+   - `Tag` — Categorie
+   - `Clock` — Laatst bijgewerkt
+   - `CheckCircle2` — Afgewerkt op (alléén als `resolvedAt`)
+
+De API-include op `/api/work-requests/[id]` (GET én PATCH) levert `requestedBy.id`, `building`, `department`, `room` zodat de frontend eigenaarschap kan bepalen en de hiërarchie kan tonen.
 
 ### Cache-gedrag (v1.4)
 
@@ -438,6 +462,13 @@ END $$;
 
 Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elke deploy automatisch gesynchroniseerd. `prisma db push` zonder `--accept-data-loss` faalt bij destructieve wijzigingen (bewust) zodat je stille dataverlies voorkomt. Zorg dat `DIRECT_URL` in Vercel gedefinieerd is, want `prisma db push` vereist een directe connectie (poort 5432, niet de PgBouncer-pooler op 6543).
 
+## Wat is geïmplementeerd in v1.5
+
+- **Eén voortgangsindicator** op de werkaanvraag detailpagina: slider voor de eigenaar, statische balk voor read-only kijkers. Voorheen werden beide tegelijk getoond — dat oogde dubbel.
+- **Eigenaarschap als bewerkrecht** (i.p.v. rol). Alleen `workRequest.requestedBy.id === user.id` kan de slider bedienen. De vroegere `canEdit = user?.role !== 'MEDEWERKER'` is afgeschaft.
+- **Volledige locatiehiërarchie zichtbaar** in de Details-kaart: naast Campus ook Gebouw, Afdeling en Kamer (elk alléén wanneer toegekend) met eigen lucide-iconen.
+- **API en types uitgebreid**: GET/PATCH `/api/work-requests/[id]` includen nu `building`, `department`, `room`; het `WorkRequest`-type heeft `requestedBy.id` en de drie nieuwe optionele relaties.
+
 ## Wat is geïmplementeerd in v1.4
 
 - **Werkaanvraag detailpagina** `/work-requests/[id]` met:
@@ -465,7 +496,7 @@ Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elk
 
 Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.5+:
 
-1. **RBAC enforcement op API routes**: de Next.js API routes controleren momenteel niet de gebruikersrol. De werkaanvraag detailpagina gating is UI-only; de PATCH endpoint accepteert een voortgangs-update van elke geldige token.
+1. **RBAC / eigenaarschap-enforcement op API routes**: de Next.js API routes controleren momenteel niet de gebruikersrol of het eigenaarschap. De werkaanvraag detailpagina gating is UI-only; de PATCH `/api/work-requests/[id]` accepteert een voortgangs-update van elke geldige token, ongeacht of die token van de aanvrager is. Server-side controle (`user.id === workRequest.requestedById`) is een v1.6-taak.
 2. **Foto upload**: het werkaanvraag formulier toont een upload area, maar de daadwerkelijke file upload is nog niet geïmplementeerd.
 3. **Taak- en projectdetail**: `/tasks/[id]` en `/projects/[id]` ontbreken nog (alleen `/work-requests/[id]` bestaat vanaf v1.4).
 4. **Work request conversie**: "Omzetten naar taak/project/aankoop" knoppen bestaan niet in de UI.
@@ -494,9 +525,11 @@ Deze items zijn **niet geïmplementeerd** en zijn kandidaten voor v1.5+:
 ## Hoe verder te werken
 
 1. Clone het repo: `git clone https://github.com/WebNurse-ctrl/HandyMan.git`
-2. Checkout de hoofdbranch: `git checkout main`
-3. Werk in `frontend/` — dat is de actieve app.
-4. Na schema-wijzigingen: update `frontend/prisma/schema.prisma`, draai `npx prisma db push` tegen de Supabase DB (of schrijf equivalente SQL voor de SQL Editor). Alternatief: zet Vercel's Build Command op `npm run build:with-db-sync` zodat elke deploy het schema automatisch synchroniseert.
-5. Voor een nieuwe feature: maak een feature branch vanaf `main` (bijv. `feature/task-detail-page`) en merge terug in `main` als die klaar is.
-6. `git push` triggert automatisch een Vercel deployment.
-7. De `backend/` map bevat de originele NestJS code als referentie; deze draait niet op Vercel.
+2. **Eerst:** `git fetch --all` zodat álle branches lokaal zichtbaar zijn. De repo bevat tien+ feature branches; zonder fetch lijkt het alsof er minder werk is.
+3. Checkout de **deploy-branch**: `git checkout claude/modernize-handyman-ui-EEzjx` (NIET `main` — dat is achterhaald en niet wat Vercel deployt).
+4. Werk in `frontend/` — dat is de actieve app.
+5. **Vóór elke commit**: lees `docs/UI_INVARIANTS.md` en `frontend/CLAUDE.md`. De SessionStart-hook toont de invariants automatisch. Run `cd frontend && npx tsc --noEmit && npm run build` om groen licht te krijgen.
+6. Na schema-wijzigingen: update `frontend/prisma/schema.prisma`, draai `npx prisma db push` tegen de Supabase DB (of schrijf equivalente SQL voor de SQL Editor). Alternatief: zet Vercel's Build Command op `npm run build:with-db-sync` zodat elke deploy het schema automatisch synchroniseert.
+7. Voor een nieuwe feature: blijf op `claude/modernize-handyman-ui-EEzjx` of maak een feature branch vanaf die branch. Een feature branch ergens anders heeft géén effect op de live deploy.
+8. `git push -u origin claude/modernize-handyman-ui-EEzjx` triggert automatisch een Vercel productie-deployment.
+9. De `backend/` map bevat de originele NestJS code als referentie; deze draait niet op Vercel.
