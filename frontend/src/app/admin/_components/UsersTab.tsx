@@ -40,13 +40,55 @@ export default function UsersTab() {
       id: string;
       patch: { role?: string; scopeCampusIds?: string[] };
     }) => apiPatch(`/api/users/${id}`, patch),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast.success('Gebruiker bijgewerkt');
+    // Optimistic update: pas de cache aan zodra de gebruiker klikt,
+    // zonder te wachten op de server-response.
+    onMutate: async ({ id, patch }) => {
+      await queryClient.cancelQueries({ queryKey: ['admin-users'] });
+      const queries = queryClient.getQueriesData<PaginatedResponse<User>>({
+        queryKey: ['admin-users'],
+      });
+      queries.forEach(([key, snapshot]) => {
+        if (!snapshot) return;
+        queryClient.setQueryData<PaginatedResponse<User>>(key, {
+          ...snapshot,
+          data: snapshot.data.map((u) => {
+            if (u.id !== id) return u;
+            const next: User = { ...u };
+            if (patch.role !== undefined) next.role = patch.role as User['role'];
+            if (patch.scopeCampusIds !== undefined) {
+              const idSet = new Set(patch.scopeCampusIds);
+              next.scopeCampuses = campuses
+                .filter((c) => idSet.has(c.id))
+                .map((c) => ({ id: c.id, name: c.name }));
+            }
+            return next;
+          }),
+        });
+      });
+      return { queries };
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, _vars, ctx) => {
+      // Rollback bij fout.
+      ctx?.queries.forEach(([key, snapshot]) => {
+        if (snapshot) queryClient.setQueryData(key, snapshot);
+      });
       const err = error as { response?: { data?: { message?: string } } };
       toast.error(err.response?.data?.message || 'Bijwerken mislukt');
+    },
+    onSuccess: (serverUser) => {
+      // Vervang de optimistic-versie met de server-response (autoritair).
+      const updated = serverUser as User;
+      const queries = queryClient.getQueriesData<PaginatedResponse<User>>({
+        queryKey: ['admin-users'],
+      });
+      queries.forEach(([key, snapshot]) => {
+        if (!snapshot) return;
+        queryClient.setQueryData<PaginatedResponse<User>>(key, {
+          ...snapshot,
+          data: snapshot.data.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)),
+        });
+      });
+      toast.success('Gebruiker bijgewerkt');
     },
   });
 
