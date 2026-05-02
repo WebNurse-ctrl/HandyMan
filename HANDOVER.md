@@ -133,7 +133,7 @@ join-tabellen `user_campus_scopes` en `user_invitation_scopes` toe):
 | **`rooms`** | **v1.3** Kamers/ruimtes per afdeling. Cascade delete vanuit afdeling. |
 | `locations` | Legacy v1.0 locaties. Nog gekoppeld aan work_requests via `locationId`. |
 | `categories` | Categorieën met hiërarchie (parentId) en kleurlabel (HEX). |
-| `work_requests` | Werkaanvragen. v1.3: `building_id`, `department_id`, `room_id`. **v1.4**: `progress INT 0–100` (stappen van 20). **v1.6**: `assigned_to_id` (nullable; eigenaar na pickup). |
+| `work_requests` | Werkaanvragen. v1.3: `building_id`, `department_id`, `room_id`. **v1.4**: `progress INT 0–100` (stappen van 20). **v1.6**: `assigned_to_id` (nullable; eigenaar na pickup). **v1.6 fase D**: `deadline`, `start_date`, `end_date` (allen nullable; planning-velden). |
 | **`user_invitations`** | **v1.6 fase A** Uitnodigingen: `email`, `token` (uniek), `invited_by_id`, `suggested_role`, `expires_at` (7 dagen), `accepted_at`. Scope is M2M via `user_invitation_scopes`. |
 | **`user_campus_scopes`** | **v1.6 fase C-2** Join-tabel `user_id` × `campus_id` (composite PK). Bepaalt voor niet-MEDEWERKERs welke campussen ze in werkaanvragen zien. Lege set = volledige organisatie. Cascade delete vanuit beide kanten. |
 | **`user_invitation_scopes`** | **v1.6 fase C-2** Join-tabel `invitation_id` × `campus_id`. Wordt bij accept-invite naar `user_campus_scopes` gekopieerd. |
@@ -171,7 +171,7 @@ Een afdeling hoort **altijd** bij een campus, en **optioneel** bij een gebouw va
 - **ProjectStatus**: PLANNING, ACTIEF, ON_HOLD, AFGEROND, GEANNULEERD
 - **PurchaseStatus**: AANGEVRAAGD, WACHT_OP_GOEDKEURING, GOEDGEKEURD_DIENSTHOOFD, GOEDGEKEURD, AFGEWEZEN, BESTELD, GELEVERD
 - **PurchaseType**: KLEIN, GROOT
-- **NotificationType** (v1.6): WORK_REQUEST_CREATED, WORK_REQUEST_STATUS_CHANGED, **WORK_REQUEST_ASSIGNED**, TASK_ASSIGNED, TASK_STATUS_CHANGED, TASK_DEADLINE_APPROACHING, PURCHASE_APPROVAL_NEEDED, PURCHASE_APPROVED, PURCHASE_REJECTED, PROJECT_BUDGET_ALERT, COMMENT_ADDED, **USER_REGISTERED**
+- **NotificationType** (v1.6): WORK_REQUEST_CREATED, WORK_REQUEST_STATUS_CHANGED, **WORK_REQUEST_ASSIGNED**, **WORK_REQUEST_DEADLINE_APPROACHING** (fase D), **WORK_REQUEST_DEADLINE_EXCEEDED** (fase D), TASK_ASSIGNED, TASK_STATUS_CHANGED, TASK_DEADLINE_APPROACHING, PURCHASE_APPROVAL_NEEDED, PURCHASE_APPROVED, PURCHASE_REJECTED, PROJECT_BUDGET_ALERT, COMMENT_ADDED, **USER_REGISTERED**
 
 ## Authenticatie Flow
 
@@ -594,6 +594,73 @@ v1.6 brengt **gebruikersbeheer** (uitnodigingen via e-mail), **scope-gebaseerde
 toegang** tot werkaanvragen, **MEDEWERKER-restricties** en de **pickup-flow**
 voor de technische dienst. De wijzigingen zijn in drie sequentiële fasen
 uitgerold (A → B → C); zie de gedetailleerde secties hieronder voor elke fase.
+
+### v1.6 fase D — deadlines + alarm-meldingen
+
+Werkaanvragen krijgen drie optionele datum-velden:
+
+| Veld | Doel |
+|---|---|
+| `deadline` | Uiterste datum waarop de aanvraag afgewerkt moet zijn |
+| `start_date` | Geplande startdatum van het werk |
+| `end_date` | Geplande einddatum van het werk |
+
+**Drempels** (in `frontend/src/lib/deadlines.ts`):
+
+- `approaching` = deadline binnen 3 dagen, status ≠ AFGEWERKT/GEWEIGERD
+- `overdue` = deadline gepasseerd, status ≠ AFGEWERKT/GEWEIGERD
+- Aanvragen zonder deadline of in eindstatus → `none`
+
+**UI-meldingen**:
+
+- **Detailpagina**: alarm-banner tussen header en 2-koloms grid bij
+  `approaching` (oranje, `AlarmClock`-icoon) of `overdue` (rood,
+  `AlertTriangle`-icoon).
+- **Lijstpagina**: nieuwe kolom "Deadline" met state-chip in dezelfde
+  kleuren; aanvragen zonder deadline tonen `—`.
+- **Details-kaart**: drie nieuwe rijen met iconen `AlarmClock` (Deadline,
+  inline waarschuwingstekst), `Calendar` (Startdatum), `CalendarCheck2`
+  (Einddatum). De kaart-header heeft een `Pencil` "Planning"-knop voor
+  de assignedTo-eigenaar en ADMIN/FM/DH; opent een modal met drie
+  `<input type="date">`-velden.
+
+**Notificaties** (server-side, in `frontend/src/lib/deadline-notifications.ts`):
+
+- Bij elke `GET /api/work-requests` (lijst-fetch) wordt
+  `processDeadlineNotifications()` op de achtergrond aangeroepen.
+- Voor elke aanvraag met `assignedToId IS NOT NULL`, `deadline IS NOT NULL`,
+  status ≠ `AFGEWERKT`/`GEWEIGERD` en deadline approaching/overdue:
+  maakt een notificatie aan voor de toegewezen behandelaar van type
+  `WORK_REQUEST_DEADLINE_APPROACHING` of `_EXCEEDED`.
+- **Idempotent** via 24 u-throttle op `(userId, entityId, type)` —
+  bestaande recente notificatie binnen 24 u → skip.
+- Failures gelogd, lijst-respons blijft werken.
+
+**API** (`PATCH /api/work-requests/[id]`):
+
+- Accepteert `deadline`, `startDate`, `endDate` (ISO-strings of `null`).
+- Permissie: assignedTo + ADMIN/FM/DH (zelfde set als progress-edit /
+  force-assign).
+- `POST /api/work-requests` accepteert dezelfde drie velden bij creatie
+  (optioneel; standaard `null`).
+
+**Migratie-SQL (v1.6 fase D)**:
+
+```sql
+-- Datum-kolommen op werkaanvragen
+ALTER TABLE "work_requests"
+  ADD COLUMN IF NOT EXISTS "deadline"   TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "start_date" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "end_date"   TIMESTAMP(3);
+
+-- Nieuwe NotificationType-waardes (los uitvoeren — niet binnen transactie)
+ALTER TYPE "NotificationType"
+  ADD VALUE IF NOT EXISTS 'WORK_REQUEST_DEADLINE_APPROACHING';
+ALTER TYPE "NotificationType"
+  ADD VALUE IF NOT EXISTS 'WORK_REQUEST_DEADLINE_EXCEEDED';
+```
+
+`prisma db push` regelt dit ook automatisch.
 
 ### v1.6 fase C — invitation-flow + scope-RBAC
 

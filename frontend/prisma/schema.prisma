@@ -260,6 +260,9 @@ model WorkRequest {
   suggestedPriority Priority?       @map("suggested_priority")
   status          WorkRequestStatus @default(INGEDIEND)
   progress        Int               @default(0)
+  deadline        DateTime?
+  startDate       DateTime?         @map("start_date")
+  endDate         DateTime?         @map("end_date")
   rejectionReason String?           @map("rejection_reason")
   resolvedAt      DateTime?         @map("resolved_at")
   createdAt       DateTime          @default(now()) @map("created_at")
@@ -526,6 +529,8 @@ enum NotificationType {
   WORK_REQUEST_CREATED
   WORK_REQUEST_STATUS_CHANGED
   WORK_REQUEST_ASSIGNED
+  WORK_REQUEST_DEADLINE_APPROACHING
+  WORK_REQUEST_DEADLINE_EXCEEDED
   TASK_ASSIGNED
   TASK_STATUS_CHANGED
   TASK_DEADLINE_APPROACHING

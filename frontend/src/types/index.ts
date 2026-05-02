@@ -68,6 +68,9 @@ export interface WorkRequest {
   priority: Priority;
   status: WorkRequestStatus;
   progress: number;
+  deadline?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   rejectionReason?: string;
   resolvedAt?: string;
   createdAt: string;

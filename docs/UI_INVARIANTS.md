@@ -48,8 +48,11 @@ het begin van elke sessie.
      gebruik **eigenaarschap via `assignedTo`** (v1.6 fase B).
 3. **Details-kaart bevat een icoon per veld** (`User`, `UserCheck`,
    `Building2`, `Building`, `LayoutGrid`, `DoorOpen`, `MapPin`, `Tag`,
-   `Clock`, `CheckCircle2`). De icoon staat in een 36×36 afgeronde tegel
-   met `bg-muted text-muted-foreground` links van label+waarde.
+   `AlarmClock`, `Calendar`, `CalendarCheck2`, `Clock`, `CheckCircle2`).
+   De icoon staat in een 36×36 afgeronde tegel met
+   `bg-muted text-muted-foreground` links van label+waarde. De
+   Details-header heeft een optionele `Pencil` "Planning"-knop voor de
+   `assignedTo`-eigenaar en ADMIN/FM/DH (opent een datum-modal).
 4. **Volledige locatiehiërarchie in Details**: naast Campus toont de kaart
    ook **Gebouw**, **Afdeling** en **Kamer** (elk alléén wanneer aan de
    aanvraag toegekend). Mapping: `Building` voor gebouw, `LayoutGrid` voor
@@ -70,6 +73,13 @@ het begin van elke sessie.
    - `Loslaten` — de huidige `assignedTo` zelf, of ADMIN/FM altijd.
    - `Anders toewijzen` — DH/FM/ADMIN, opent een modal met de
      technische staf (lijst uit `/api/users/technical-staff`).
+9. **Deadline-alarm-banner** boven de titel:
+   - Verschijnt alléén wanneer `getDeadlineState(deadline, status)` =
+     `'overdue'` (rood, `AlertTriangle`-icoon, "Deadline overschreden")
+     of `'approaching'` (oranje, `AlarmClock`-icoon, "Deadline nadert").
+   - Niet zichtbaar als de aanvraag `AFGEWERKT` of `GEWEIGERD` is, of
+     als er geen deadline is gezet. Banner staat tussen header en
+     het 2-koloms grid; breekt het grid niet.
 
 ### Waarom
 

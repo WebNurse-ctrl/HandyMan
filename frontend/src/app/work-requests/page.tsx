@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { HandHelping, Plus } from 'lucide-react';
+import { AlarmClock, AlertTriangle, HandHelping, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AppLayout from '@/components/layout/AppLayout';
 import DataTable from '@/components/ui/DataTable';
@@ -14,8 +14,10 @@ import PageHeader from '@/components/ui/PageHeader';
 import FilterChips from '@/components/ui/FilterChips';
 import { apiGet, apiPatch } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
+import { daysUntilDeadline, getDeadlineState } from '@/lib/deadlines';
 import { WorkRequest, PaginatedResponse } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@/lib/utils';
 
 const PICKUP_ROLES = ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'ADMIN', 'FACILITAIR_MANAGER'];
 
@@ -101,6 +103,38 @@ export default function WorkRequestsPage() {
       key: 'status',
       label: 'Status',
       render: (item: WorkRequest) => <StatusBadge status={item.status} />,
+    },
+    {
+      key: 'deadline',
+      label: 'Deadline',
+      render: (item: WorkRequest) => {
+        if (!item.deadline) {
+          return <span className="text-xs italic text-muted-foreground">—</span>;
+        }
+        const state = getDeadlineState(item.deadline, item.status);
+        const days = daysUntilDeadline(item.deadline) ?? 0;
+        if (state === 'overdue') {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Overschreden
+            </span>
+          );
+        }
+        if (state === 'approaching') {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">
+              <AlarmClock className="h-3.5 w-3.5" />
+              Nog {days} dag{days === 1 ? '' : 'en'}
+            </span>
+          );
+        }
+        return (
+          <span className={cn('text-sm text-muted-foreground')}>
+            {formatDateTime(item.deadline)}
+          </span>
+        );
+      },
     },
     {
       key: 'createdAt',

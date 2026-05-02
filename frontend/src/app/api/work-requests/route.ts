@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
+import { processDeadlineNotifications } from '@/lib/deadline-notifications';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,10 @@ export async function GET(request: NextRequest) {
       ];
     }
 
+    // Deadline-notificaties idempotent bijwerken (max 1×/24 u per (user,entity,type)).
+    // Loopt op de achtergrond; we hoeven niet te wachten.
+    void processDeadlineNotifications();
+
     const [data, total] = await Promise.all([
       prisma.workRequest.findMany({
         where,
@@ -94,7 +99,17 @@ export async function POST(request: NextRequest) {
       locationId,
       categoryId,
       priority,
+      deadline,
+      startDate,
+      endDate,
     } = body;
+
+    const toDateOrNull = (v: unknown): Date | null | undefined => {
+      if (v === undefined || v === null || v === '') return null;
+      if (typeof v !== 'string') return null;
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
 
     const year = new Date().getFullYear();
     const count = await prisma.workRequest.count({
@@ -120,6 +135,9 @@ export async function POST(request: NextRequest) {
         locationId: locationId || undefined,
         categoryId: categoryId || undefined,
         priority: priority || 'NORMAAL',
+        deadline: toDateOrNull(deadline),
+        startDate: toDateOrNull(startDate),
+        endDate: toDateOrNull(endDate),
       },
       include: {
         requestedBy: { select: { displayName: true, email: true } },

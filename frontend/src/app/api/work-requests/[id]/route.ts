@@ -112,9 +112,59 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { progress, status, priority, rejectionReason, assignedToId } = body;
+    const { progress, status, priority, rejectionReason, assignedToId, deadline, startDate, endDate } = body;
 
     const data: Record<string, unknown> = {};
+
+    // Datumvelden: assignee + ASSIGN_ROLES mogen plannen.
+    const canPlan =
+      isAdmin ||
+      user.role === 'DIENSTHOOFD' ||
+      (current.assignedToId !== null && current.assignedToId === user.id);
+
+    const parseDate = (v: unknown, label: string): Date | null | undefined => {
+      if (v === undefined) return undefined;
+      if (v === null || v === '') return null;
+      if (typeof v !== 'string') {
+        throw new Error(`Ongeldige waarde voor ${label}`);
+      }
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) {
+        throw new Error(`Ongeldige datum voor ${label}`);
+      }
+      return d;
+    };
+
+    let deadlineParsed: Date | null | undefined;
+    let startParsed: Date | null | undefined;
+    let endParsed: Date | null | undefined;
+    try {
+      deadlineParsed = parseDate(deadline, 'deadline');
+      startParsed = parseDate(startDate, 'startdatum');
+      endParsed = parseDate(endDate, 'einddatum');
+    } catch (e) {
+      return NextResponse.json(
+        { message: e instanceof Error ? e.message : 'Ongeldige datum' },
+        { status: 400 },
+      );
+    }
+
+    const planningChanged =
+      deadlineParsed !== undefined ||
+      startParsed !== undefined ||
+      endParsed !== undefined;
+
+    if (planningChanged) {
+      if (!canPlan) {
+        return NextResponse.json(
+          { message: 'Geen toestemming om planning bij te werken.' },
+          { status: 403 },
+        );
+      }
+      if (deadlineParsed !== undefined) data.deadline = deadlineParsed;
+      if (startParsed !== undefined) data.startDate = startParsed;
+      if (endParsed !== undefined) data.endDate = endParsed;
+    }
 
     // ── assignedToId: claim / release / force-assign ──
     if (assignedToId !== undefined) {

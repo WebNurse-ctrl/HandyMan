@@ -5,15 +5,21 @@ import { useParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
+  AlarmClock,
+  AlertTriangle,
   ArrowLeft,
   Building,
   Building2,
+  Calendar,
+  CalendarCheck2,
+  CalendarClock,
   CheckCircle2,
   Clock,
   DoorOpen,
   HandHelping,
   LayoutGrid,
   MapPin,
+  Pencil,
   Tag,
   User as UserIcon,
   UserCheck,
@@ -30,6 +36,7 @@ import { formatDateTime } from '@/lib/utils';
 import { Comment, TechnicalStaffMember, WorkRequest } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { daysUntilDeadline, getDeadlineState } from '@/lib/deadlines';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOCKED LAYOUT — see frontend/CLAUDE.md / docs/UI_INVARIANTS.md
@@ -99,6 +106,7 @@ export default function WorkRequestDetailPage() {
   const [progressDraft, setProgressDraft] = useState<number>(0);
   const [commentDraft, setCommentDraft] = useState('');
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [planningOpen, setPlanningOpen] = useState(false);
 
   useEffect(() => {
     if (workRequest) setProgressDraft(workRequest.progress ?? 0);
@@ -130,6 +138,22 @@ export default function WorkRequestDetailPage() {
     },
     onError: (err: { response?: { data?: { message?: string } } }) =>
       toast.error(err?.response?.data?.message ?? 'Toewijzen mislukt'),
+  });
+
+  const planningMutation = useMutation({
+    mutationFn: (planning: {
+      deadline: string | null;
+      startDate: string | null;
+      endDate: string | null;
+    }) => apiPatch<WorkRequest>(`/api/work-requests/${id}`, planning),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['work-request', id], updated);
+      queryClient.invalidateQueries({ queryKey: ['work-requests'] });
+      setPlanningOpen(false);
+      toast.success('Planning opgeslagen');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err?.response?.data?.message ?? 'Planning opslaan mislukt'),
   });
 
   const commentMutation = useMutation({
@@ -194,6 +218,10 @@ export default function WorkRequestDetailPage() {
     canPickup && !workRequest.assignedTo && workRequest.status === 'INGEDIEND';
   const canRelease = isAssignee || (isAdmin && !!workRequest.assignedTo);
   const canForceAssign = ASSIGN_ROLES.includes(userRole);
+  const canEditPlanning = isAssignee || isAdmin || userRole === 'DIENSTHOOFD';
+
+  const deadlineState = getDeadlineState(workRequest.deadline, workRequest.status);
+  const daysToDeadline = daysUntilDeadline(workRequest.deadline);
 
   return (
     <AppLayout>
@@ -225,6 +253,36 @@ export default function WorkRequestDetailPage() {
             </div>
           </div>
         </div>
+
+        {(deadlineState === 'overdue' || deadlineState === 'approaching') && (
+          <div
+            role="alert"
+            className={cn(
+              'flex items-start gap-3 rounded-xl border p-4',
+              deadlineState === 'overdue'
+                ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                : 'border-warning/40 bg-warning/10 text-warning-foreground',
+            )}
+          >
+            {deadlineState === 'overdue' ? (
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+            ) : (
+              <AlarmClock className="mt-0.5 h-5 w-5 flex-shrink-0" />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">
+                {deadlineState === 'overdue'
+                  ? 'Deadline overschreden'
+                  : 'Deadline nadert'}
+              </p>
+              <p className="mt-0.5 text-sm">
+                {deadlineState === 'overdue'
+                  ? `De deadline was ${formatDateTime(workRequest.deadline!)} (${Math.abs(daysToDeadline ?? 0)} dag${Math.abs(daysToDeadline ?? 0) === 1 ? '' : 'en'} geleden). De aanvraag is nog niet afgewerkt.`
+                  : `Nog ${daysToDeadline} dag${daysToDeadline === 1 ? '' : 'en'} tot ${formatDateTime(workRequest.deadline!)}.`}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Hoofdkolom: omschrijving + feedback */}
@@ -462,9 +520,22 @@ export default function WorkRequestDetailPage() {
 
             {/* ─── Details (met iconen per veld — BLIJVEN behouden) ─── */}
             <div className="card">
-              <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Details
-              </h2>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Details
+                </h2>
+                {canEditPlanning && (
+                  <button
+                    type="button"
+                    onClick={() => setPlanningOpen(true)}
+                    className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    title="Planning bewerken"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Planning
+                  </button>
+                )}
+              </div>
               <dl className="space-y-4 text-sm">
                 <DetailRow icon={<UserIcon />} label="Aanvrager">
                   <div className="flex items-center gap-2.5">
@@ -540,6 +611,36 @@ export default function WorkRequestDetailPage() {
                   </DetailRow>
                 )}
 
+                <DetailRow icon={<AlarmClock />} label="Deadline">
+                  {workRequest.deadline ? (
+                    <span
+                      className={cn(
+                        deadlineState === 'overdue' && 'font-semibold text-destructive',
+                        deadlineState === 'approaching' && 'font-semibold text-warning',
+                      )}
+                    >
+                      {formatDateTime(workRequest.deadline)}
+                      {deadlineState === 'overdue' && ' · OVERSCHREDEN'}
+                      {deadlineState === 'approaching' &&
+                        ` · nog ${daysToDeadline} dag${daysToDeadline === 1 ? '' : 'en'}`}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Niet ingesteld</span>
+                  )}
+                </DetailRow>
+
+                {workRequest.startDate && (
+                  <DetailRow icon={<Calendar />} label="Startdatum">
+                    {formatDateTime(workRequest.startDate)}
+                  </DetailRow>
+                )}
+
+                {workRequest.endDate && (
+                  <DetailRow icon={<CalendarCheck2 />} label="Einddatum">
+                    {formatDateTime(workRequest.endDate)}
+                  </DetailRow>
+                )}
+
                 <DetailRow icon={<Clock />} label="Laatst bijgewerkt">
                   {formatDateTime(workRequest.updatedAt)}
                 </DetailRow>
@@ -561,6 +662,17 @@ export default function WorkRequestDetailPage() {
           onClose={() => setReassignOpen(false)}
           onSelect={(uid) => assignMutation.mutate(uid)}
           isSubmitting={assignMutation.isPending}
+        />
+      )}
+
+      {planningOpen && (
+        <PlanningDialog
+          deadline={workRequest.deadline ?? null}
+          startDate={workRequest.startDate ?? null}
+          endDate={workRequest.endDate ?? null}
+          onClose={() => setPlanningOpen(false)}
+          onSave={(p) => planningMutation.mutate(p)}
+          isSubmitting={planningMutation.isPending}
         />
       )}
     </AppLayout>
@@ -677,6 +789,135 @@ function ReassignDialog({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function toDateInput(value: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  // YYYY-MM-DD voor <input type="date">
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function PlanningDialog({
+  deadline,
+  startDate,
+  endDate,
+  onClose,
+  onSave,
+  isSubmitting,
+}: {
+  deadline: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  onClose: () => void;
+  onSave: (p: {
+    deadline: string | null;
+    startDate: string | null;
+    endDate: string | null;
+  }) => void;
+  isSubmitting: boolean;
+}) {
+  const [dl, setDl] = useState(toDateInput(deadline));
+  const [sd, setSd] = useState(toDateInput(startDate));
+  const [ed, setEd] = useState(toDateInput(endDate));
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      deadline: dl ? new Date(dl).toISOString() : null,
+      startDate: sd ? new Date(sd).toISOString() : null,
+      endDate: ed ? new Date(ed).toISOString() : null,
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={submit}
+        className="w-full max-w-md rounded-xl bg-card p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <CalendarClock className="h-4 w-4" />
+            Planning bewerken
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Stel deadline, geplande start- en einddatum in. Laat een veld leeg
+          om het te wissen.
+        </p>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <label htmlFor="planning-deadline" className="label">
+              Deadline
+            </label>
+            <input
+              id="planning-deadline"
+              type="date"
+              value={dl}
+              onChange={(e) => setDl(e.target.value)}
+              className="input mt-1"
+            />
+          </div>
+          <div>
+            <label htmlFor="planning-start" className="label">
+              Startdatum
+            </label>
+            <input
+              id="planning-start"
+              type="date"
+              value={sd}
+              onChange={(e) => setSd(e.target.value)}
+              className="input mt-1"
+            />
+          </div>
+          <div>
+            <label htmlFor="planning-end" className="label">
+              Einddatum
+            </label>
+            <input
+              id="planning-end"
+              type="date"
+              value={ed}
+              onChange={(e) => setEd(e.target.value)}
+              className="input mt-1"
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-ghost h-9 px-3"
+            disabled={isSubmitting}
+          >
+            Annuleren
+          </button>
+          <button
+            type="submit"
+            className="btn-primary h-9 px-3"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Opslaan...' : 'Opslaan'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
