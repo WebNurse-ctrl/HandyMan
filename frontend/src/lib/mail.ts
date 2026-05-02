@@ -130,13 +130,23 @@ function inviteEmailText({ inviterName, acceptUrl, expiresAt }: InvitationEmailP
 
 export async function sendInvitationEmail(params: InvitationEmailParams): Promise<void> {
   const resend = getResend();
-  await resend.emails.send({
+  const result = await resend.emails.send({
     from: getFrom(),
     to: params.to,
     subject: `${params.inviterName} heeft je uitgenodigd voor HandyMan`,
     html: inviteEmailHtml(params),
     text: inviteEmailText(params),
   });
+
+  // Resend's SDK returns { data, error } and does NOT throw on API rejections
+  // (unverified sender domain, invalid recipient, rate-limits, ...).
+  // We must inspect `error` ourselves and surface it.
+  if (result.error) {
+    const name = result.error.name ?? 'resend_error';
+    const message = result.error.message ?? 'onbekende Resend-fout';
+    console.error('Resend rejected email:', result.error);
+    throw new Error(`Resend (${name}): ${message}`);
+  }
 }
 
 export function buildAcceptInviteUrl(token: string): string {

@@ -453,7 +453,7 @@ Mutaties invalideren expliciet `['work-requests']`, `['dashboard']`, `['work-req
 | `AZURE_AD_REDIRECT_URI` | `https://handyman-eta-mocha.vercel.app/api/auth/callback` |
 | `AUTH_SECRET` | **v1.6** HS256 JWT-signing key (≥ 32 tekens). Bv. `openssl rand -base64 48`. |
 | `RESEND_API_KEY` | **v1.6 fase C** API-key van Resend voor uitnodigingsmails |
-| `MAIL_FROM` | **v1.6 fase C** Verzendadres bv. `HandyMan <noreply@example.be>` |
+| `MAIL_FROM` | **v1.6 fase C** Verzendadres bv. `HandyMan <noreply@example.be>`. **Let op**: het domein moet geverifieerd zijn in de Resend-dashboard (DNS-records), anders rejectt Resend de send. Voor testen kan `HandyMan <onboarding@resend.dev>` gebruikt worden — dat domein is altijd geldig op een Resend-account. |
 | `APP_URL` | **v1.6 fase C** Publieke URL voor accept-invite links |
 
 ## Database Migraties

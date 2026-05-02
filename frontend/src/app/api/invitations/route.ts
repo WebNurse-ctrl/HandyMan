@@ -110,10 +110,11 @@ export async function POST(request: NextRequest) {
       console.error('Invitation mail error:', mailErr);
       // Rol back zodat de admin het opnieuw kan proberen.
       await prisma.userInvitation.delete({ where: { id: invitation.id } });
+      const detail =
+        mailErr instanceof Error ? mailErr.message : 'onbekende fout';
       return NextResponse.json(
         {
-          message:
-            'E-mail verzenden mislukt. Controleer RESEND_API_KEY / MAIL_FROM en probeer opnieuw.',
+          message: `E-mail verzenden mislukt: ${detail}. Controleer of het MAIL_FROM-domein geverifieerd is in Resend (of gebruik tijdelijk onboarding@resend.dev).`,
         },
         { status: 502 },
       );
