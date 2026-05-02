@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Plus, ListChecks, ShoppingBag } from 'lucide-react';
+import { Plus, ListChecks, ClipboardList, AlarmClock } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PageHeader from '@/components/ui/PageHeader';
@@ -12,12 +12,18 @@ import Avatar from '@/components/ui/Avatar';
 import Skeleton from '@/components/ui/Skeleton';
 import EmptyState from '@/components/ui/EmptyState';
 import { apiGet } from '@/lib/api';
-import { formatCurrency } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { Project, PaginatedResponse } from '@/types';
 import { cn } from '@/lib/utils';
+import { getDeadlineState } from '@/lib/deadlines';
+import { useAuth } from '@/hooks/useAuth';
+
+const MANAGE_ROLES = ['DIENSTHOOFD', 'FACILITAIR_MANAGER', 'ADMIN'];
 
 export default function ProjectsPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const canCreate = !!user && MANAGE_ROLES.includes(user.role);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -46,14 +52,16 @@ export default function ProjectsPage() {
           title="Projecten"
           description="Overzicht van alle projecten met budget- en voortgangsinfo"
           actions={
-            <button
-              type="button"
-              onClick={() => router.push('/projects/new')}
-              className="btn-primary"
-            >
-              <Plus className="h-4 w-4" />
-              Nieuw project
-            </button>
+            canCreate ? (
+              <button
+                type="button"
+                onClick={() => router.push('/projects/new')}
+                className="btn-primary"
+              >
+                <Plus className="h-4 w-4" />
+                Nieuw project
+              </button>
+            ) : null
           }
         />
 
@@ -85,17 +93,12 @@ export default function ProjectsPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {data?.data.map((project) => {
-              const budgetPercent =
-                project.budgetApproved && project.budgetApproved > 0
-                  ? Math.round((project.budgetSpent / project.budgetApproved) * 100)
-                  : 0;
-              const tone =
-                budgetPercent > 90
-                  ? 'bg-destructive'
-                  : budgetPercent > 70
-                    ? 'bg-warning'
-                    : 'bg-primary';
-
+              const deadlineState = getDeadlineState(
+                project.deadline ?? null,
+                project.status === 'AFGEROND' || project.status === 'GEANNULEERD'
+                  ? 'AFGEWERKT'
+                  : 'IN_BEHANDELING',
+              );
               return (
                 <button
                   key={project.id}
@@ -121,42 +124,39 @@ export default function ProjectsPage() {
                     </p>
                   )}
 
-                  {project.budgetApproved && project.budgetApproved > 0 ? (
-                    <div className="mt-5 space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Budget</span>
-                        <span className="font-medium text-foreground tabular-nums">
-                          {formatCurrency(project.budgetSpent)} /{' '}
-                          {formatCurrency(project.budgetApproved)}
-                        </span>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={cn('h-full rounded-full transition-all', tone)}
-                          style={{ width: `${Math.min(budgetPercent, 100)}%` }}
-                        />
-                      </div>
-                      <p className="text-right text-[11px] font-medium tabular-nums text-muted-foreground">
-                        {budgetPercent}% gebruikt
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="mt-5 text-xs text-muted-foreground">
-                      Geen budget ingesteld
+                  {project.description && (
+                    <p className="mt-3 line-clamp-2 text-xs text-muted-foreground">
+                      {project.description}
                     </p>
+                  )}
+
+                  {project.deadline && (
+                    <div
+                      className={cn(
+                        'mt-4 inline-flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-[11px] font-medium',
+                        deadlineState === 'overdue'
+                          ? 'bg-destructive/10 text-destructive'
+                          : deadlineState === 'approaching'
+                            ? 'bg-warning/15 text-warning'
+                            : 'bg-muted text-muted-foreground',
+                      )}
+                    >
+                      <AlarmClock className="h-3 w-3" />
+                      {formatDate(project.deadline)}
+                    </div>
                   )}
 
                   <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       {project._count && (
                         <>
-                          <span className="inline-flex items-center gap-1">
+                          <span className="inline-flex items-center gap-1" title="Werkaanvragen">
+                            <ClipboardList className="h-3.5 w-3.5" />
+                            {project._count.workRequests ?? 0}
+                          </span>
+                          <span className="inline-flex items-center gap-1" title="Taken">
                             <ListChecks className="h-3.5 w-3.5" />
                             {project._count.tasks}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <ShoppingBag className="h-3.5 w-3.5" />
-                            {project._count.purchases}
                           </span>
                         </>
                       )}

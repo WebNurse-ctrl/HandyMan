@@ -63,8 +63,9 @@ het begin van elke sessie.
    originele indiener. `Toegewezen aan` (icoon `UserCheck`) toont de
    huidige eigenaar of "Nog niet opgepikt".
 6. **Hoofdkolom** bevat enkel: Omschrijving + Feedback (comments).
-7. De `<aside>` met de zijbalk gebruikt `space-y-6` zodat de twee kaarten
-   netjes onder elkaar staan met dezelfde gap als de hoofdkolom.
+7. De `<aside>` met de zijbalk gebruikt `space-y-6` zodat de kaarten
+   netjes onder elkaar staan met dezelfde gap als de hoofdkolom. Sinds
+   **v1.7** zijn dat **drie** kaarten: Werkvooruitgang → Details → Taken.
 8. **Pickup-knoppen leven in de Werkvooruitgang-kaart**, onder de
    slider/balk, gescheiden door een `border-t border-border pt-4`. Deze
    knoppen zijn rolafhankelijk:
@@ -100,6 +101,14 @@ voortgang. Server-side gating op `PATCH /api/work-requests/[id]`
 controleert dit eveneens (de UI-only gating uit "Bekende beperkingen 1"
 is daarmee gedicht). Niet terugrollen naar aanvrager-gating of
 dubbele indicator zonder expliciete nieuwe vraag.
+
+In **v1.7** is een **Project**-rij toegevoegd aan Details (icoon
+`FolderKanban`) met "Wijzigen"-knop voor DH/FM/ADMIN die een
+project-picker opent (`PATCH /api/work-requests/[id]` met `projectId`).
+Onder Details kwam een **Taken**-kaart als derde zijbalk-kaart, met
+"+ Nieuwe taak"-knop (TD/DH/FM/ADMIN); MEDEWERKERs kunnen geen taken
+toegewezen krijgen. De hoofdkolom blijft strikt: enkel Omschrijving +
+Feedback. Het takenblok hoort niet thuis in de hoofdkolom.
 
 ---
 

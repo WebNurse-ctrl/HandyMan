@@ -23,6 +23,9 @@ bestaande functionaliteit verbreken of UX-keuzes terugrollen zijn
 - **Deadlines (v1.6 fase D)**: `src/lib/deadlines.ts` (state-helper
   + threshold) en `src/lib/deadline-notifications.ts` (idempotente
   notificatie-creatie, cron-friendly).
+- **Storage (v1.7)**: `@supabase/supabase-js` via `src/lib/storage.ts`.
+  Foto-uploads gebruiken multipart-form naar `/api/attachments`.
+  Gebruik altijd de hergebruikbare `PhotoUploader`-component.
 
 ## Themasysteem
 

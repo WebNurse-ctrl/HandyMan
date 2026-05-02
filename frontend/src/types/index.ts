@@ -65,6 +65,10 @@ export interface WorkRequest {
   room?: { id: string; name?: string | null; number?: string | null };
   location?: { name: string };
   category?: { name: string };
+  /** v1.7 — koppeling aan project (N:1 via WorkRequest.projectId). */
+  project?: { id: string; name: string; projectNumber: string; status?: ProjectStatus } | null;
+  /** v1.7 — taken die uit deze werkaanvraag voortkomen. */
+  tasks?: Task[];
   priority: Priority;
   status: WorkRequestStatus;
   progress: number;
@@ -75,7 +79,7 @@ export interface WorkRequest {
   resolvedAt?: string;
   createdAt: string;
   updatedAt: string;
-  _count?: { comments: number; attachments: number };
+  _count?: { comments: number; attachments: number; tasks?: number };
 }
 
 export interface TechnicalStaffMember {
@@ -101,19 +105,20 @@ export interface Task {
   id: string;
   taskNumber: string;
   title: string;
-  description?: string;
-  assignedTo?: { displayName: string; avatarUrl?: string };
-  createdBy: { displayName: string };
-  project?: { name: string; projectNumber: string };
-  category?: { name: string };
+  description?: string | null;
+  assignedTo?: { id?: string; displayName: string; avatarUrl?: string | null } | null;
+  createdBy?: { id?: string; displayName: string };
+  project?: { id?: string; name: string; projectNumber: string } | null;
+  workRequest?: { id: string; title: string; requestNumber: string } | null;
+  category?: { id?: string; name: string; color?: string | null } | null;
   priority: Priority;
   status: TaskStatus;
-  startDate?: string;
-  dueDate?: string;
-  completedAt?: string;
-  estimatedHours?: number;
+  startDate?: string | null;
+  dueDate?: string | null;
+  completedAt?: string | null;
+  estimatedHours?: number | null;
   createdAt: string;
-  _count?: { logs: number; comments: number };
+  _count?: { logs?: number; comments?: number; attachments?: number };
 }
 
 export interface TaskLog {
@@ -136,17 +141,52 @@ export interface Project {
   id: string;
   projectNumber: string;
   name: string;
-  description?: string;
-  campus?: { name: string };
-  manager?: { displayName: string; avatarUrl?: string };
+  description?: string | null;
+  campus?: { id?: string; name: string } | null;
+  manager?: {
+    id?: string;
+    displayName: string;
+    email?: string;
+    avatarUrl?: string | null;
+    role?: UserRole;
+  } | null;
+  createdBy?: { id?: string; displayName: string; email?: string };
   status: ProjectStatus;
-  budgetEstimate?: number;
-  budgetApproved?: number;
+  budgetEstimate?: number | null;
+  budgetApproved?: number | null;
   budgetSpent: number;
-  startDate?: string;
-  endDate?: string;
+  /** v1.7 — projectdeadline */
+  deadline?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  completedAt?: string | null;
   createdAt: string;
-  _count?: { tasks: number; purchases: number };
+  attachments?: Attachment[];
+  workRequests?: WorkRequest[];
+  tasks?: Task[];
+  _count?: { tasks: number; purchases: number; workRequests?: number };
+}
+
+export interface Attachment {
+  id: string;
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  workRequestId?: string | null;
+  taskId?: string | null;
+  projectId?: string | null;
+  createdAt: string;
+}
+
+export interface ProjectLeadCandidate {
+  id: string;
+  displayName: string;
+  email: string;
+  role: UserRole;
+  department?: string | null;
+  avatarUrl?: string | null;
 }
 
 // Purchase types

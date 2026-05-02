@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { ASSIGN_ROLES, PICKUP_ROLES, requireAuth } from '@/lib/auth';
+import { ASSIGN_ROLES, PICKUP_ROLES, PROJECT_MANAGE_ROLES, requireAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +17,15 @@ const detailInclude = {
   room: { select: { id: true, name: true, number: true } },
   location: { select: { id: true, name: true, building: true, floor: true, room: true } },
   category: { select: { id: true, name: true, icon: true, color: true } },
+  project: { select: { id: true, name: true, projectNumber: true, status: true } },
   attachments: true,
+  tasks: {
+    orderBy: { createdAt: 'desc' as const },
+    include: {
+      assignedTo: { select: { id: true, displayName: true, avatarUrl: true } },
+      _count: { select: { logs: true, comments: true, attachments: true } },
+    },
+  },
   _count: { select: { comments: true, attachments: true, tasks: true } },
 } as const;
 
@@ -112,7 +120,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { progress, status, priority, rejectionReason, assignedToId, deadline, startDate, endDate } = body;
+    const { progress, status, priority, rejectionReason, assignedToId, deadline, startDate, endDate, projectId } = body;
 
     const data: Record<string, unknown> = {};
 
@@ -278,6 +286,41 @@ export async function PATCH(
 
     if (priority !== undefined) data.priority = priority;
     if (rejectionReason !== undefined) data.rejectionReason = rejectionReason;
+
+    // ── projectId: koppelen / ontkoppelen aan project ──
+    // Alleen DH/FM/ADMIN mogen werkaanvragen aan projecten koppelen.
+    if (projectId !== undefined) {
+      if (!(PROJECT_MANAGE_ROLES as readonly string[]).includes(user.role)) {
+        return NextResponse.json(
+          { message: 'Alleen Diensthoofd, Facilitair manager of Administrator kan een werkaanvraag aan een project koppelen.' },
+          { status: 403 },
+        );
+      }
+      const target = projectId === null || projectId === '' ? null : String(projectId);
+      if (target) {
+        const project = await prisma.project.findUnique({
+          where: { id: target },
+          select: { id: true, campusId: true },
+        });
+        if (!project) {
+          return NextResponse.json(
+            { message: 'Project niet gevonden.' },
+            { status: 404 },
+          );
+        }
+        if (
+          project.campusId &&
+          scopeCampusIds.length > 0 &&
+          !scopeCampusIds.includes(project.campusId)
+        ) {
+          return NextResponse.json(
+            { message: 'Geen toegang tot dit project.' },
+            { status: 403 },
+          );
+        }
+      }
+      data.projectId = target;
+    }
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json(

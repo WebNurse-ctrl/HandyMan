@@ -4,6 +4,7 @@ Mono-repo voor HandyMan (facility-management platform). De applicatie
 bestaat uit een Next.js frontend (in `frontend/`) en een verzameling
 docs/scripts. Sinds **v1.6** is dit een monolithische Next.js app op
 Vercel met Supabase als database; de oudere `backend/` map is legacy.
+**v1.7** voegt projecten + taken-koppeling toe (zie HANDOVER.md).
 
 ## Direct lezen vóór elke wijziging
 
@@ -64,6 +65,24 @@ moeten blijven. Deze zijn al meermaals per ongeluk teruggerold:
 - **Server-side RBAC via `requireAuth`/`requireRole`** uit `lib/auth.ts`
   voor werkaanvragen, comments, invitations, users. Niet vervangen door
   ongated route-handlers.
+- **v1.7 — Projecten/Taken**:
+  - Project aanmaken/wijzigen/verwijderen = DH/FM/ADMIN
+    (`PROJECT_MANAGE_ROLES`).
+  - Taak aanmaken/wijzigen + toewijzing = iedereen behalve MEDEWERKER
+    (`TASK_MANAGE_ROLES`). Een MEDEWERKER kan géén taak toegewezen
+    krijgen — de API blokkeert dit.
+  - Werkaanvragen koppelen aan project via `WorkRequest.projectId`
+    (N:1, naast de bestaande 1-1 `Project.workRequestId` "originele
+    aanvraag"). Koppelen via PATCH `projectId` op werkaanvraag (DH/FM/
+    ADMIN).
+  - Foto-uploads gebruiken **Supabase Storage** via
+    `lib/storage.ts` + `/api/attachments` (POST multipart) en
+    `/api/attachments/[id]` (DELETE). Bucket default `attachments`.
+    Vereist env-vars `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` en
+    optioneel `SUPABASE_STORAGE_BUCKET`.
+  - Project-detailpagina toont een cascaded boomweergave Project →
+    werkaanvragen (uitklapbaar) → taken per werkaanvraag → losse taken
+    zonder werkaanvraag.
 
 ## Snelle architectuur-pointers
 

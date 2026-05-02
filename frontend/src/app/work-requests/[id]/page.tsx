@@ -16,10 +16,13 @@ import {
   CheckCircle2,
   Clock,
   DoorOpen,
+  FolderKanban,
   HandHelping,
   LayoutGrid,
+  ListChecks,
   MapPin,
   Pencil,
+  Plus,
   Tag,
   User as UserIcon,
   UserCheck,
@@ -32,8 +35,15 @@ import PriorityIndicator from '@/components/ui/PriorityIndicator';
 import Avatar, { getInitials } from '@/components/ui/Avatar';
 import Spinner from '@/components/ui/Spinner';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
-import { formatDateTime } from '@/lib/utils';
-import { Comment, TechnicalStaffMember, WorkRequest } from '@/types';
+import { formatDate, formatDateTime } from '@/lib/utils';
+import {
+  Comment,
+  Project,
+  ProjectLeadCandidate,
+  Task,
+  TechnicalStaffMember,
+  WorkRequest,
+} from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { daysUntilDeadline, getDeadlineState } from '@/lib/deadlines';
@@ -56,6 +66,13 @@ const PROGRESS_STEPS = [0, 20, 40, 60, 80, 100] as const;
 const PICKUP_ROLES = ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'ADMIN', 'FACILITAIR_MANAGER'];
 const ADMIN_ROLES = ['ADMIN', 'FACILITAIR_MANAGER'];
 const ASSIGN_ROLES = ['ADMIN', 'FACILITAIR_MANAGER', 'DIENSTHOOFD'];
+const TASK_MANAGE_ROLES = [
+  'TECHNISCHE_DIENST',
+  'DIENSTHOOFD',
+  'FACILITAIR_MANAGER',
+  'ADMIN',
+];
+const PROJECT_MANAGE_ROLES = ['DIENSTHOOFD', 'FACILITAIR_MANAGER', 'ADMIN'];
 
 function snapToStep(value: number): number {
   return PROGRESS_STEPS.reduce((prev, curr) =>
@@ -107,6 +124,8 @@ export default function WorkRequestDetailPage() {
   const [commentDraft, setCommentDraft] = useState('');
   const [reassignOpen, setReassignOpen] = useState(false);
   const [planningOpen, setPlanningOpen] = useState(false);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
 
   useEffect(() => {
     if (workRequest) setProgressDraft(workRequest.progress ?? 0);
@@ -169,6 +188,32 @@ export default function WorkRequestDetailPage() {
     onError: () => toast.error('Feedback toevoegen mislukt'),
   });
 
+  const taskMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<Task>('/api/tasks', { ...payload, workRequestId: id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['work-request', id] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setNewTaskOpen(false);
+      toast.success('Taak aangemaakt');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err?.response?.data?.message ?? 'Taak aanmaken mislukt'),
+  });
+
+  const projectMutation = useMutation({
+    mutationFn: (projectId: string | null) =>
+      apiPatch<WorkRequest>(`/api/work-requests/${id}`, { projectId }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['work-request', id], updated);
+      queryClient.invalidateQueries({ queryKey: ['work-requests'] });
+      setProjectPickerOpen(false);
+      toast.success(updated.project ? 'Project gekoppeld' : 'Project losgekoppeld');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) =>
+      toast.error(err?.response?.data?.message ?? 'Project koppelen mislukt'),
+  });
+
   const progressDirty = useMemo(
     () => workRequest && workRequest.progress !== progressDraft,
     [workRequest, progressDraft],
@@ -219,6 +264,9 @@ export default function WorkRequestDetailPage() {
   const canRelease = isAssignee || (isAdmin && !!workRequest.assignedTo);
   const canForceAssign = ASSIGN_ROLES.includes(userRole);
   const canEditPlanning = isAssignee || isAdmin || userRole === 'DIENSTHOOFD';
+  const canManageTasks = TASK_MANAGE_ROLES.includes(userRole);
+  const canLinkProject = PROJECT_MANAGE_ROLES.includes(userRole);
+  const tasks = workRequest.tasks ?? [];
 
   const deadlineState = getDeadlineState(workRequest.deadline, workRequest.status);
   const daysToDeadline = daysUntilDeadline(workRequest.deadline);
@@ -611,6 +659,41 @@ export default function WorkRequestDetailPage() {
                   </DetailRow>
                 )}
 
+                <DetailRow icon={<FolderKanban />} label="Project">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      {workRequest.project ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            router.push(`/projects/${workRequest.project!.id}`)
+                          }
+                          className="truncate text-left font-medium text-foreground hover:text-primary"
+                        >
+                          <span className="font-mono text-[11px] text-muted-foreground">
+                            {workRequest.project.projectNumber}
+                          </span>{' '}
+                          · {workRequest.project.name}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Niet aan een project gekoppeld
+                        </span>
+                      )}
+                    </div>
+                    {canLinkProject && (
+                      <button
+                        type="button"
+                        onClick={() => setProjectPickerOpen(true)}
+                        className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Wijzigen
+                      </button>
+                    )}
+                  </div>
+                </DetailRow>
+
                 <DetailRow icon={<AlarmClock />} label="Deadline">
                   {workRequest.deadline ? (
                     <span
@@ -652,6 +735,81 @@ export default function WorkRequestDetailPage() {
                 )}
               </dl>
             </div>
+
+            {/* ─── Taken (v1.7) ─── */}
+            <div className="card">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <ListChecks className="h-3.5 w-3.5" />
+                  Taken ({tasks.length})
+                </h2>
+                {canManageTasks && (
+                  <button
+                    type="button"
+                    onClick={() => setNewTaskOpen(true)}
+                    className="inline-flex h-7 items-center gap-1 rounded-md bg-primary/10 px-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Nieuwe taak
+                  </button>
+                )}
+              </div>
+              {tasks.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nog geen taken voor deze werkaanvraag.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {tasks.map((t) => {
+                    const overdue =
+                      !!t.dueDate &&
+                      new Date(t.dueDate) < new Date() &&
+                      t.status !== 'AFGEWERKT';
+                    return (
+                      <li key={t.id}>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/tasks/${t.id}`)}
+                          className="flex w-full items-start gap-2 rounded-md border border-border px-2.5 py-2 text-left transition-colors hover:bg-muted"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                {t.taskNumber}
+                              </span>
+                              <span className="truncate text-sm text-foreground">
+                                {t.title}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <StatusBadge status={t.status} />
+                              {t.dueDate && (
+                                <span
+                                  className={cn(
+                                    'inline-flex items-center gap-1 text-[11px]',
+                                    overdue
+                                      ? 'font-medium text-destructive'
+                                      : 'text-muted-foreground',
+                                  )}
+                                >
+                                  <AlarmClock className="h-3 w-3" />
+                                  {formatDate(t.dueDate)}
+                                </span>
+                              )}
+                              {t.assignedTo && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  · {t.assignedTo.displayName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           </aside>
         </div>
       </div>
@@ -673,6 +831,23 @@ export default function WorkRequestDetailPage() {
           onClose={() => setPlanningOpen(false)}
           onSave={(p) => planningMutation.mutate(p)}
           isSubmitting={planningMutation.isPending}
+        />
+      )}
+
+      {newTaskOpen && (
+        <NewTaskDialog
+          onClose={() => setNewTaskOpen(false)}
+          onSave={(p) => taskMutation.mutate(p)}
+          isSubmitting={taskMutation.isPending}
+        />
+      )}
+
+      {projectPickerOpen && (
+        <ProjectPickerDialog
+          currentProjectId={workRequest.project?.id ?? null}
+          onClose={() => setProjectPickerOpen(false)}
+          onSelect={(pid) => projectMutation.mutate(pid)}
+          isSubmitting={projectMutation.isPending}
         />
       )}
     </AppLayout>
@@ -918,6 +1093,275 @@ function PlanningDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function NewTaskDialog({
+  onClose,
+  onSave,
+  isSubmitting,
+}: {
+  onClose: () => void;
+  onSave: (p: Record<string, unknown>) => void;
+  isSubmitting: boolean;
+}) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [assignedToId, setAssignedToId] = useState('');
+  const [priority, setPriority] = useState<'LAAG' | 'NORMAAL' | 'HOOG' | 'URGENT'>(
+    'NORMAAL',
+  );
+
+  const { data: candidates = [] } = useQuery<ProjectLeadCandidate[]>({
+    queryKey: ['project-leads'],
+    queryFn: () => apiGet('/api/users/project-leads'),
+  });
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const t = title.trim();
+    if (!t) {
+      toast.error('Taaknaam is verplicht');
+      return;
+    }
+    onSave({
+      title: t,
+      description: description.trim() || null,
+      dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+      assignedToId: assignedToId || null,
+      priority,
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={submit}
+        className="w-full max-w-md rounded-xl bg-card p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <ListChecks className="h-4 w-4" />
+            Nieuwe taak
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label htmlFor="task-title" className="label">
+              Taaknaam <span className="text-destructive">*</span>
+            </label>
+            <input
+              id="task-title"
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="input mt-1"
+              maxLength={150}
+            />
+          </div>
+          <div>
+            <label htmlFor="task-desc" className="label">
+              Omschrijving
+            </label>
+            <textarea
+              id="task-desc"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="input mt-1"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="task-due" className="label">
+                Deadline
+              </label>
+              <input
+                id="task-due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="input mt-1"
+              />
+            </div>
+            <div>
+              <label htmlFor="task-priority" className="label">
+                Prioriteit
+              </label>
+              <select
+                id="task-priority"
+                className="input mt-1"
+                value={priority}
+                onChange={(e) =>
+                  setPriority(
+                    e.target.value as 'LAAG' | 'NORMAAL' | 'HOOG' | 'URGENT',
+                  )
+                }
+              >
+                <option value="LAAG">Laag</option>
+                <option value="NORMAAL">Normaal</option>
+                <option value="HOOG">Hoog</option>
+                <option value="URGENT">Urgent</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label htmlFor="task-assignee" className="label">
+              Toewijzen aan
+            </label>
+            <select
+              id="task-assignee"
+              className="input mt-1"
+              value={assignedToId}
+              onChange={(e) => setAssignedToId(e.target.value)}
+            >
+              <option value="">Niet toegewezen</option>
+              {candidates.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.displayName} · {u.role.replace(/_/g, ' ').toLowerCase()}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Een gewone medewerker kan geen taak toegewezen krijgen.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-ghost h-9 px-3"
+            disabled={isSubmitting}
+          >
+            Annuleren
+          </button>
+          <button
+            type="submit"
+            className="btn-primary h-9 px-3"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Aanmaken...' : 'Aanmaken'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ProjectPickerDialog({
+  currentProjectId,
+  onClose,
+  onSelect,
+  isSubmitting,
+}: {
+  currentProjectId: string | null;
+  onClose: () => void;
+  onSelect: (projectId: string | null) => void;
+  isSubmitting: boolean;
+}) {
+  const { data, isLoading } = useQuery<{ data: Project[] }>({
+    queryKey: ['projects', 'all'],
+    queryFn: () => apiGet('/api/projects', { limit: 200 }),
+  });
+  const projects = data?.data ?? [];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-xl bg-card p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <FolderKanban className="h-4 w-4" />
+            Aan project koppelen
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 max-h-72 space-y-1 overflow-y-auto">
+          <button
+            type="button"
+            disabled={isSubmitting || currentProjectId === null}
+            onClick={() => onSelect(null)}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors',
+              currentProjectId === null
+                ? 'cursor-not-allowed bg-muted/40 opacity-60'
+                : 'hover:bg-muted',
+            )}
+          >
+            <X className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">
+              Geen project (loskoppelen)
+            </span>
+          </button>
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Projecten laden...</p>
+          ) : projects.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nog geen projecten. Maak er één aan via het Projecten-overzicht.
+            </p>
+          ) : (
+            projects.map((p) => {
+              const current = p.id === currentProjectId;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={isSubmitting || current}
+                  onClick={() => onSelect(p.id)}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-left transition-colors',
+                    current
+                      ? 'cursor-not-allowed bg-muted/40 opacity-60'
+                      : 'hover:bg-muted',
+                  )}
+                >
+                  <FolderKanban className="h-4 w-4 flex-shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {p.name}
+                      {current && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          (huidig)
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {p.projectNumber} · {p.status}
+                    </p>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
     </div>
   );
 }

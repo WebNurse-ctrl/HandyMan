@@ -76,6 +76,21 @@ export const PICKUP_ROLES: RoleSet = [
   'ADMIN',
   'FACILITAIR_MANAGER',
 ];
+/** v1.7 — wie projecten mag aanmaken / wijzigen / verwijderen.
+ *  Beperkt tot DH/FM/ADMIN. */
+export const PROJECT_MANAGE_ROLES: RoleSet = [
+  'DIENSTHOOFD',
+  'FACILITAIR_MANAGER',
+  'ADMIN',
+];
+/** v1.7 — wie taken mag aanmaken / wijzigen.
+ *  Iedereen behalve MEDEWERKER. */
+export const TASK_MANAGE_ROLES: RoleSet = [
+  'TECHNISCHE_DIENST',
+  'DIENSTHOOFD',
+  'FACILITAIR_MANAGER',
+  'ADMIN',
+];
 
 export interface AuthContext {
   user: User;

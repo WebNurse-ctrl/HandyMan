@@ -1,4 +1,4 @@
-# HandyMan - Project Handover Document v1.6
+# HandyMan - Project Handover Document v1.7
 
 > Dit document bevat alle informatie die nodig is om in een nieuwe Claude Code sessie verder te werken aan HandyMan. Lees dit bestand eerst volledig voordat je wijzigingen maakt.
 
@@ -16,6 +16,10 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
 - **Vercel deploy-branch (Production)**: `claude/modernize-handyman-ui-EEzjx` — élke
   push hierheen triggert een productie-deploy. **Werk standaard op deze branch**
   tenzij expliciet anders gevraagd. `main` loopt achter en is GEEN deploy-bron.
+- **v1.7 commits op deploy-branch** (meest recent eerst):
+  - feat(projects+tasks): v1.7 — projecten met deadline + foto's,
+    cascaded project-detail, taken-kaart op werkaanvraag-detail,
+    project-koppeling op werkaanvraag, Supabase Storage uploads
 - **v1.6 commits op deploy-branch** (meest recent eerst):
   - `f65b9c6` fix(deadline-banner): donker-oranje tekst op licht-oranje banner
   - `7521ec3` feat(deadlines): fase D — planning-velden + alarm-banner + notificaties
@@ -466,6 +470,9 @@ Mutaties invalideren expliciet `['work-requests']`, `['dashboard']`, `['work-req
 | `RESEND_API_KEY` | **v1.6 fase C** API-key van Resend voor uitnodigingsmails |
 | `MAIL_FROM` | **v1.6 fase C** Verzendadres bv. `HandyMan <noreply@example.be>`. **Let op**: het domein moet geverifieerd zijn in de Resend-dashboard (DNS-records), anders rejectt Resend de send. Voor testen kan `HandyMan <onboarding@resend.dev>` gebruikt worden — dat domein is altijd geldig op een Resend-account. |
 | `APP_URL` | **v1.6 fase C** Publieke URL voor accept-invite links |
+| `SUPABASE_URL` | **v1.7** Supabase-project URL (voor Storage uploads) |
+| `SUPABASE_SERVICE_ROLE_KEY` | **v1.7** Supabase service-role key — alléén op de server. Mag NIET in client-bundles. |
+| `SUPABASE_STORAGE_BUCKET` | **v1.7** Optioneel, default `attachments`. De bucket moet bestaan en publiek leesbaar zijn. |
 
 ## Database Migraties
 
@@ -594,6 +601,53 @@ END $$;
 ```
 
 Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elke deploy automatisch gesynchroniseerd. `prisma db push` zonder `--accept-data-loss` faalt bij destructieve wijzigingen (bewust) zodat je stille dataverlies voorkomt. Zorg dat `DIRECT_URL` in Vercel gedefinieerd is, want `prisma db push` vereist een directe connectie (poort 5432, niet de PgBouncer-pooler op 6543).
+
+## Wat is geïmplementeerd in v1.7
+
+v1.7 bracht volwaardige **projecten** + een **taken-koppeling op werkaanvragen**:
+
+1. **Projecten** (DH/FM/ADMIN aanmaken/wijzigen/verwijderen)
+   - Velden: titel, omschrijving, **`deadline`** (nieuw veld), campus,
+     **projectverantwoordelijke** (= `manager`, niet-MEDEWERKER), startdatum,
+     einddatum, status (PLANNING / ACTIEF / ON_HOLD / AFGEROND / GEANNULEERD).
+   - Foto's via Supabase Storage (bucket default `attachments`).
+   - Lijst-pagina toont deadline-pill (oranje/rood bij approaching/overdue).
+   - Detail-pagina toont een **cascaded boomweergave**: Project →
+     Werkaanvragen (uitklapbaar) → Taken per werkaanvraag → losse
+     Taken zonder werkaanvraag.
+2. **Werkaanvraag ↔ Project**
+   - Nieuwe FK `WorkRequest.projectId` (N:1) — naast de bestaande 1-1
+     `Project.workRequestId` (origin) blijft beide naast elkaar bestaan.
+   - PATCH `/api/work-requests/[id]` accepteert `projectId` (DH/FM/ADMIN);
+     gating in `lib/auth.ts` via `PROJECT_MANAGE_ROLES`.
+   - Werkaanvraag-detail heeft een **Project**-rij in Details
+     (`FolderKanban`-icoon) met "Wijzigen"-knop die een project-picker opent.
+3. **Taken**
+   - `/api/tasks` POST + `/api/tasks/[id]` PATCH/DELETE; gating via
+     `TASK_MANAGE_ROLES` (= iedereen behalve MEDEWERKER).
+   - Toewijzing: een MEDEWERKER kan géén taak toegewezen krijgen
+     (server-side 400-check).
+   - Velden: taaknaam, omschrijving, deadline (`dueDate`), prioriteit,
+     foto's, optioneel gekoppeld aan werkaanvraag en/of project.
+   - Werkaanvraag-detail heeft een **Taken**-kaart als 3e zijbalk-kaart
+     (onder Details) met "+ Nieuwe taak"-knop die een modal opent.
+   - Hoofdkolom blijft strikt: enkel Omschrijving + Feedback (UI_INVARIANTS §6).
+4. **Foto-uploads (Supabase Storage)**
+   - `lib/storage.ts` gebruikt service-role key om naar bucket te uploaden.
+   - `/api/attachments` POST multipart (file + target + targetId) en
+     `/api/attachments/[id]` DELETE met scope/role-checks.
+   - Hergebruikbare `<PhotoUploader />`-component (`components/ui/PhotoUploader.tsx`).
+   - Limieten: max 10 MB per foto, JPG/PNG/WEBP/GIF/HEIC.
+5. **Server-side gating**
+   - `PROJECT_MANAGE_ROLES = ['DIENSTHOOFD', 'FACILITAIR_MANAGER', 'ADMIN']`
+   - `TASK_MANAGE_ROLES = ['TECHNISCHE_DIENST', 'DIENSTHOOFD', 'FACILITAIR_MANAGER', 'ADMIN']`
+   - Scope-RBAC werkt door: projecten met campus binnen scope (lege array
+     = volledige organisatie); taken via gerelateerde werkaanvraag/project.
+6. **Database-wijziging** (zie `prisma/migrations/2026_05_02_v17_projects_tasks.sql`):
+   - `work_requests.project_id` (FK SET NULL bij delete) + index.
+   - `projects.deadline DateTime?`.
+   - Nieuwe env-vars: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+     optioneel `SUPABASE_STORAGE_BUCKET` (default "attachments").
 
 ## Wat is geïmplementeerd in v1.6
 
