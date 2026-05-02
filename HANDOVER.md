@@ -17,7 +17,14 @@ HandyMan is een **facility management webapplicatie** voor organisaties met meer
   push hierheen triggert een productie-deploy. **Werk standaard op deze branch**
   tenzij expliciet anders gevraagd. `main` loopt achter en is GEEN deploy-bron.
 - **v1.6 commits op deploy-branch** (meest recent eerst):
-  - `4182393` feat(users): v1.6 fase C — invitations, scope-RBAC, MEDEWERKER-restrictie
+  - `f65b9c6` fix(deadline-banner): donker-oranje tekst op licht-oranje banner
+  - `7521ec3` feat(deadlines): fase D — planning-velden + alarm-banner + notificaties
+  - `a755c70` fix(scope-ux): scope-popover via portal + optimistische checkbox-feedback
+  - `f8446bc` feat(scope): fase C-2 — multi-campus scope (1+ campussen of volledige organisatie)
+  - `baebfcd` fix(mail): inspecteer Resend-response en surface echte fout
+  - `1a797ad` feat(work-requests): Diensthoofd mag ook anders-toewijzen
+  - `f9a866c` docs(v1.6): synchroniseer alle documenten met v1.6-eindstand
+  - `4182393` feat(users): v1.6 fase C — invitations, scope-RBAC en MEDEWERKER-restrictie
   - `e399c18` feat(work-requests): v1.6 fase B — pickup-flow + server-side progress-gating
   - `6b13bb3` feat(auth): v1.6 fase A — schema-fundament + JWT/bcrypt auth
 - **v1.5 commits**:
@@ -590,10 +597,78 @@ Als je Vercel's **Build Command** op `npm run build:with-db-sync` zet, wordt elk
 
 ## Wat is geïmplementeerd in v1.6
 
-v1.6 brengt **gebruikersbeheer** (uitnodigingen via e-mail), **scope-gebaseerde
-toegang** tot werkaanvragen, **MEDEWERKER-restricties** en de **pickup-flow**
-voor de technische dienst. De wijzigingen zijn in drie sequentiële fasen
-uitgerold (A → B → C); zie de gedetailleerde secties hieronder voor elke fase.
+v1.6 bracht **gebruikersbeheer** (uitnodigingen via e-mail), **scope-gebaseerde
+toegang** tot werkaanvragen, **MEDEWERKER-restricties**, de **pickup-flow**
+voor de technische dienst, en **planning + deadline-alarmen**. De wijzigingen
+zijn in vier sequentiële fases uitgerold (A → B → C → C-2 → D); zie de
+gedetailleerde secties hieronder voor elke fase.
+
+### v1.6 hoofdpunten in één oogopslag
+
+- **Auth v2** (fase A): bcrypt password-hash + HS256 JWT (`AUTH_SECRET`).
+  Microsoft Entra SSO én e-mail/wachtwoord-login co-existeren.
+- **Pickup-flow** (fase B): TD/Diensthoofd "pikken werkaanvragen op" en
+  worden eigenaar; de aanvrager blijft zichtbaar maar verliest het
+  bewerkrecht op de slider. Server-side ge-gate.
+- **Invitations + Resend mail** (fase C): admins/FM/DH nodigen
+  medewerkers uit. HTML-mail met emerald/cyan brand-template, accept-
+  link → wachtwoord instellen → profiel vervolledigen → automatische
+  notificaties naar admins.
+- **MEDEWERKER-restrictie** (fase C): MEDEWERKER ziet alléén eigen
+  aanvragen + kan nieuwe indienen. Sidebar verbergt de rest; AppLayout
+  redirect; API geeft 403/404.
+- **Multi-campus scope** (fase C-2): elke niet-MEDEWERKER kan toegang
+  hebben tot één, meerdere of géén campussen via de join-tabel
+  `user_campus_scopes`. Lege selectie = volledige organisatie.
+- **Planning + deadlines** (fase D): drie optionele datum-velden op
+  werkaanvragen (deadline/start_date/end_date) met UI-alarmen bij
+  nadering/overschrijding en automatische notificaties naar de
+  toegewezen behandelaar.
+
+## Roadmap — voorzien voor v1.7+
+
+In de volgende sessie willen we **taken en projecten uitwerken** tot het
+niveau dat werkaanvragen nu hebben. Concrete kandidaten:
+
+### Taken
+
+- `/tasks/[id]`-detailpagina met dezelfde locked-layout-conventies als
+  werkaanvragen: rechts-zijbalk Werkvooruitgang + Details, hoofdkolom
+  Omschrijving + Feedback (comments).
+- Voortgangsindicator + status-flow (OPEN → IN_UITVOERING → AFGEWERKT /
+  ON_HOLD); analoog aan v1.6 fase B-pickup als de logica overlapt.
+- Werkregistratie / `task_logs`-UI: log-formulier (uren + beschrijving)
+  + lijst van eerdere logs op de detailpagina.
+- Comments-thread (de `comments`-tabel is polymorf, alleen
+  UI-integratie ontbreekt).
+- Conversie-knop op werkaanvraag-detail: "Omzetten naar taak".
+- Deadline-alarmen voor `tasks.due_date` (analoog aan
+  `WORK_REQUEST_DEADLINE_*` notificaties — `TASK_DEADLINE_APPROACHING`
+  bestaat al in de enum).
+- Server-side RBAC + scope op `/api/tasks*` (nu UI-only ge-gate).
+
+### Projecten
+
+- `/projects/[id]`-detailpagina met budget-summary + voortgang +
+  gekoppelde taken/werkaanvragen/aankopen.
+- Project-aanmaak vanuit een werkaanvraag (1-op-1 relatie via
+  `WorkRequest.project`).
+- Budget-overzicht: estimate vs approved vs spent met visuele
+  voortgangsbalk; alert bij overschrijding (`PROJECT_BUDGET_ALERT`
+  bestaat al in de enum, nog niet getriggerd).
+- Comments-thread.
+- Server-side RBAC + scope op `/api/projects*`.
+
+### Algemene v1.7-doelen
+
+- Vercel Cron job voor de deadline-check (i.p.v. on-fetch). De huidige
+  `processDeadlineNotifications()` in `lib/deadline-notifications.ts`
+  is al cron-friendly: idempotent + 24 u-throttle. Kan rechtstreeks
+  via een `/api/cron/deadlines`-endpoint exposed worden.
+- Wachtwoord-reset / "vergeten"-flow.
+- Rate-limiting op `/api/auth/password-login`.
+- Profiel bewerken na completion (`/profile`-pagina toont nu read-only
+  na de eerste vul-flow).
 
 ### v1.6 fase D — deadlines + alarm-meldingen
 
@@ -1059,8 +1134,15 @@ Items die in v1.6 zijn opgelost staan ter referentie als ✅ vermeld.
   helpers; scope-filter; MEDEWERKER own-only; progress-PATCH server-side
   ge-gate op `assignedTo`.
 - ✅ **E-mail-integratie**: Resend voor uitnodigingsmails (HTML-template
-  in `lib/mail.ts`).
+  in `lib/mail.ts`). Bij API-rejecties wordt de exacte foutboodschap
+  doorgegeven (Resend SDK gooit niet, dus `result.error` wordt geïnspecteerd).
 - ✅ **Token security**: bcrypt-passwords + HS256 JWT (was base64-UUID).
+- ✅ **Multi-campus scope** (fase C-2): één gebruiker kan toegang hebben
+  tot meerdere campussen via de join-tabel `user_campus_scopes`; lege
+  selectie = volledige organisatie.
+- ✅ **Planning-velden + deadline-alarm** (fase D): deadline/start_date/
+  end_date op werkaanvragen, alarm-banner op detail, state-chip in
+  lijst, automatische notificaties naar de toegewezen behandelaar.
 
 ### Open
 
@@ -1095,8 +1177,12 @@ Items die in v1.6 zijn opgelost staan ter referentie als ✅ vermeld.
     ontbreken in de UI.
 15. **Budget alerts**: budget-overschrijding notificaties niet
     geïmplementeerd.
-16. **Deadline scheduler**: de dagelijkse deadline check (cron) werkt
-    niet op Vercel serverless.
+16. **Deadline scheduler (cron)**: `processDeadlineNotifications()`
+    draait nu on-fetch bij elke `GET /api/work-requests`. Voor een
+    echte achtergrond-scheduler (bv. om mails te versturen wanneer
+    niemand de lijst opent) is een Vercel Cron-job aangewezen — de
+    helper is idempotent + 24 u-throttled, dus klaar om als
+    `/api/cron/deadlines` aangesloten te worden.
 17. **Legacy Location tabel**: naast de nieuwe Building/Department/Room
     hiërarchie bestaat nog de oude `locations` tabel die via
     `WorkRequest.locationId` gekoppeld is. Voor nieuwe aanvragen wordt

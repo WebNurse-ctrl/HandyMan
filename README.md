@@ -8,24 +8,35 @@ taken, projecten en aankopen voor organisaties met meerdere campussen.
 ## Versie
 
 **v1.6** — gebruikersbeheer (uitnodigingen via e-mail), pickup-flow voor
-de technische dienst, scope-gebaseerde toegang en MEDEWERKER-restricties.
-Volledig overzicht in [`HANDOVER.md`](HANDOVER.md).
+de technische dienst, multi-campus scope-RBAC, MEDEWERKER-restricties
+en planning-velden + deadline-alarmen. Uitgerold in fases A → B → C →
+C-2 → D. Volledig overzicht in [`HANDOVER.md`](HANDOVER.md).
+
+Volgende sessie wordt **v1.7** met focus op taken (`/tasks`) en
+projecten (`/projects`); zie de roadmap-sectie onderaan
+[`HANDOVER.md`](HANDOVER.md).
 
 ## Features
 
 - **Werkaanvragen** — Medewerkers dienen aanvragen in met
   campus/gebouw/afdeling/kamer-locatie en categorie.
-- **Pickup-flow** (v1.6) — Technische dienst en diensthoofd kunnen
-  werkaanvragen oppikken en worden zo eigenaar (kunnen voortgang
-  bijwerken). Aanvrager blijft altijd zichtbaar.
+- **Pickup-flow** (v1.6 fase B) — Technische dienst en diensthoofd
+  kunnen werkaanvragen oppikken en worden zo eigenaar (kunnen
+  voortgang bijwerken). Aanvrager blijft altijd zichtbaar. Diensthoofd
+  + Facilitair manager + Administrator kunnen ook anders-toewijzen.
 - **Voortgangsslider** met automatische statusovergang (0 → 100% in
   stappen van 20).
 - **Feedback-thread** per werkaanvraag (comments).
-- **Gebruikersbeheer** (v1.6) — Admins/FM/Diensthoofden nodigen
+- **Gebruikersbeheer** (v1.6 fase C) — Admins/FM/Diensthoofden nodigen
   medewerkers uit via e-mail. Geactiveerde users stellen wachtwoord in
   en vervolledigen hun profiel; admins kennen rol + campus-scope toe.
-- **Scope-RBAC** (v1.6) — Gebruikers kunnen beperkt worden tot één
-  campus, of toegang krijgen tot de volledige organisatie.
+- **Multi-campus scope-RBAC** (v1.6 fase C-2) — Gebruikers kunnen
+  toegang hebben tot één, meerdere of géén campussen (lege selectie =
+  volledige organisatie).
+- **Planning + deadline-alarm** (v1.6 fase D) — Werkaanvragen kunnen
+  een deadline + start- en einddatum krijgen. Bij naderende of
+  overschreden deadline: alarm-banner op detail, state-chip in lijst,
+  automatische notificaties naar de toegewezen behandelaar.
 - **Dual auth** — Microsoft Entra ID SSO **én** e-mail/wachtwoord-login
   naast elkaar.
 - **Notificaties** — In-app notificaties (bell in navbar) bij nieuwe

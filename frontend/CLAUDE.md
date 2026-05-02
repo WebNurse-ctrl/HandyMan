@@ -17,7 +17,12 @@ bestaande functionaliteit verbreken of UX-keuzes terugrollen zijn
 - @tanstack/react-query · zustand · prisma
 - **Auth (v1.6)**: jose (HS256 JWT) + bcryptjs (password-hashing)
 - **E-mail (v1.6)**: resend (uitnodigingsmails, HTML-template in
-  `src/lib/mail.ts` met emerald/cyan gradient header)
+  `src/lib/mail.ts` met emerald/cyan gradient header). Inspecteer
+  altijd `result.error` na `resend.emails.send` — de SDK gooit niet
+  bij API-rejecties.
+- **Deadlines (v1.6 fase D)**: `src/lib/deadlines.ts` (state-helper
+  + threshold) en `src/lib/deadline-notifications.ts` (idempotente
+  notificatie-creatie, cron-friendly).
 
 ## Themasysteem
 
@@ -48,8 +53,12 @@ Op dit moment gelockt:
 
 - `src/app/work-requests/[id]/page.tsx` — voortgangsindicator hoort in
   de rechterzijbalk; details-kaart heeft iconen per veld; pickup-knoppen
-  leven in de Werkvooruitgang-kaart; eigenaar = `assignedTo`. Zie
-  `docs/UI_INVARIANTS.md` §1.
+  leven in de Werkvooruitgang-kaart; eigenaar = `assignedTo`;
+  Aanvrager + Toegewezen-aan beide zichtbaar in Details; deadline
+  alarm-banner verschijnt tussen header en grid bij
+  approaching/overdue; "Planning"-knop in Details-header opent een
+  modal met deadline/start/end-datums (alleen voor assignedTo +
+  ADMIN/FM/DH). Zie `docs/UI_INVARIANTS.md` §1 (regels 1-9).
 
 ## Auth-flow pagina's (v1.6)
 

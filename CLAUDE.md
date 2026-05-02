@@ -47,11 +47,18 @@ moeten blijven. Deze zijn al meermaals per ongeluk teruggerold:
 - **Eigenaarschap = `assignedTo`** (v1.6 fase B). Niét meer `requestedBy`,
   niét rol-gebaseerd.
 - **Iconen + volledige locatiehiërarchie** in Details (Campus / Gebouw /
-  Afdeling / Kamer + Aanvrager + Toegewezen-aan).
+  Afdeling / Kamer + Aanvrager + Toegewezen-aan + Deadline + Startdatum
+  + Einddatum waar van toepassing).
 - **Pickup-knoppen leven in de Werkvooruitgang-kaart**, niet elders.
+- **Deadline-alarm-banner** boven de titel bij approaching/overdue
+  (UI_INVARIANTS §1 punt 9). Niet vervangen door inline-melding zonder
+  vraag.
 - **MEDEWERKER-restrictie** (v1.6 fase C): mogen alleen eigen aanvragen
   zien + nieuwe indienen. Sidebar verbergt overige nav; AppLayout
   redirect; API geeft 403/404. Niet versoepelen zonder vraag.
+- **Multi-campus scope** (v1.6 fase C-2): toegang via
+  `user_campus_scopes`-join-tabel; lege selectie = volledige
+  organisatie. Niet teruggaan naar single-campus FK.
 - **Auth-token = HS256 JWT** (v1.6 fase A). Niet teruggaan naar de oude
   base64-van-UUID-token. `AUTH_SECRET` env-var is vereist.
 - **Server-side RBAC via `requireAuth`/`requireRole`** uit `lib/auth.ts`
@@ -62,10 +69,22 @@ moeten blijven. Deze zijn al meermaals per ongeluk teruggerold:
 
 - Auth-helpers: `frontend/src/lib/auth.ts` (`signSessionToken`,
   `verifySessionToken`, `requireAuth`, `requireRole`, `hashPassword`,
-  `verifyPassword`, role-constanten).
+  `verifyPassword`, role-constanten incl. `ASSIGN_ROLES`).
 - Mail-helper: `frontend/src/lib/mail.ts` (`sendInvitationEmail`,
-  `buildAcceptInviteUrl`).
+  `buildAcceptInviteUrl`). Inspecteert `result.error` van Resend zodat
+  API-rejecties (niet-geverifieerd domein, …) als echte fout
+  doorkomen.
+- Deadline-helpers: `frontend/src/lib/deadlines.ts` (`getDeadlineState`,
+  `daysUntilDeadline`, `APPROACHING_THRESHOLD_DAYS`) +
+  `frontend/src/lib/deadline-notifications.ts`
+  (`processDeadlineNotifications`, idempotent met 24 u-throttle —
+  cron-friendly).
+- Multi-campus scope: `users.scopeCampusIds` (zit in `AuthContext`
+  uit `requireAuth`); lege array = volledige organisatie. Filters in
+  werkaanvragen-routes gebruiken `where.campusId IN (scopeCampusIds)`.
 - Prisma client: `frontend/src/lib/prisma.ts`.
+- UI-component voor scope-selectie: `frontend/src/components/ui/
+  ScopeCampusSelector.tsx` (portal-popover met optimistic updates).
 
 ## Onboarding-prompt voor nieuwe sessies
 
