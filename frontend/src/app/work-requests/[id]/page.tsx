@@ -261,7 +261,7 @@ export default function WorkRequestDetailPage() {
               'flex items-start gap-3 rounded-xl border p-4',
               deadlineState === 'overdue'
                 ? 'border-destructive/40 bg-destructive/10 text-destructive'
-                : 'border-warning/40 bg-warning/10 text-warning-foreground',
+                : 'border-warning/40 bg-warning/10 text-warning',
             )}
           >
             {deadlineState === 'overdue' ? (
