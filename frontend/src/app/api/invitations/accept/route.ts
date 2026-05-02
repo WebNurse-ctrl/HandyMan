@@ -26,7 +26,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const invitation = await prisma.userInvitation.findUnique({ where: { token } });
+    const invitation = await prisma.userInvitation.findUnique({
+      where: { token },
+      include: { scopeCampuses: { select: { campusId: true } } },
+    });
     if (!invitation) {
       return NextResponse.json(
         { message: 'Uitnodiging niet gevonden' },
@@ -53,35 +56,45 @@ export async function POST(request: NextRequest) {
       where: { email: invitation.email },
     });
 
-    let user;
-    if (existing) {
-      user = await prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          passwordHash,
-          isActive: true,
-          role: invitation.suggestedRole,
-          scopeCampusId: invitation.scopeCampusId,
-          profileCompleted: existing.profileCompleted && !!existing.firstName,
-        },
-      });
-    } else {
-      user = await prisma.user.create({
-        data: {
-          email: invitation.email,
-          passwordHash,
-          displayName: invitation.email.split('@')[0],
-          role: invitation.suggestedRole,
-          scopeCampusId: invitation.scopeCampusId,
-          profileCompleted: false,
-          isActive: true,
-        },
-      });
-    }
+    const invitedScopeCampusIds = invitation.scopeCampuses.map((s) => s.campusId);
 
-    await prisma.userInvitation.update({
-      where: { id: invitation.id },
-      data: { acceptedAt: new Date() },
+    const user = await prisma.$transaction(async (tx) => {
+      let u;
+      if (existing) {
+        u = await tx.user.update({
+          where: { id: existing.id },
+          data: {
+            passwordHash,
+            isActive: true,
+            role: invitation.suggestedRole,
+            profileCompleted: existing.profileCompleted && !!existing.firstName,
+          },
+        });
+      } else {
+        u = await tx.user.create({
+          data: {
+            email: invitation.email,
+            passwordHash,
+            displayName: invitation.email.split('@')[0],
+            role: invitation.suggestedRole,
+            profileCompleted: false,
+            isActive: true,
+          },
+        });
+      }
+      // Vervang user-scopes met de scopes uit de uitnodiging.
+      await tx.userCampusScope.deleteMany({ where: { userId: u.id } });
+      if (invitedScopeCampusIds.length > 0) {
+        await tx.userCampusScope.createMany({
+          data: invitedScopeCampusIds.map((cid) => ({ userId: u.id, campusId: cid })),
+          skipDuplicates: true,
+        });
+      }
+      await tx.userInvitation.update({
+        where: { id: invitation.id },
+        data: { acceptedAt: new Date() },
+      });
+      return u;
     });
 
     // Notificatie naar alle ADMIN/FM/DH dat een nieuwe medewerker zich heeft aangemeld.

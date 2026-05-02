@@ -81,7 +81,9 @@ export interface AuthContext {
   user: User;
   isAdmin: boolean;
   isMedewerker: boolean;
-  scopeCampusId: string | null;
+  /** Lijst van campus-ID's waar de gebruiker toegang toe heeft.
+   *  Lege array = volledige organisatie (geen scope-filter). */
+  scopeCampusIds: string[];
 }
 
 export function unauthorized(message = 'Unauthorized') {
@@ -95,15 +97,21 @@ export function forbidden(message = 'Geen toegang') {
 export async function requireAuth(request: NextRequest): Promise<
   { ok: true; ctx: AuthContext } | { ok: false; response: NextResponse }
 > {
-  const user = await getUserFromRequest(request);
-  if (!user) return { ok: false, response: unauthorized() };
+  const userId = await getUserIdFromRequest(request);
+  if (!userId) return { ok: false, response: unauthorized() };
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { scopeCampuses: { select: { campusId: true } } },
+  });
+  if (!user || !user.isActive) return { ok: false, response: unauthorized() };
+  const { scopeCampuses, ...rest } = user;
   return {
     ok: true,
     ctx: {
-      user,
+      user: rest as User,
       isAdmin: ADMIN_ROLES.includes(user.role),
       isMedewerker: user.role === 'MEDEWERKER',
-      scopeCampusId: user.scopeCampusId ?? null,
+      scopeCampusIds: scopeCampuses.map((s) => s.campusId),
     },
   };
 }

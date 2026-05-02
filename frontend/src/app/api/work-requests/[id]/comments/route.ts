@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 async function loadAccessibleRequest(
   id: string,
-  ctx: { userId: string; isMedewerker: boolean; scopeCampusId: string | null },
+  ctx: { userId: string; isMedewerker: boolean; scopeCampusIds: string[] },
 ) {
   const wr = await prisma.workRequest.findUnique({
     where: { id },
@@ -14,7 +14,13 @@ async function loadAccessibleRequest(
   });
   if (!wr) return null;
   if (ctx.isMedewerker && wr.requestedById !== ctx.userId) return null;
-  if (!ctx.isMedewerker && ctx.scopeCampusId && wr.campusId !== ctx.scopeCampusId) return null;
+  if (
+    !ctx.isMedewerker &&
+    ctx.scopeCampusIds.length > 0 &&
+    !ctx.scopeCampusIds.includes(wr.campusId)
+  ) {
+    return null;
+  }
   return wr;
 }
 
@@ -25,12 +31,12 @@ export async function GET(
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
-    const { user, isMedewerker, scopeCampusId } = auth.ctx;
+    const { user, isMedewerker, scopeCampusIds } = auth.ctx;
 
     const wr = await loadAccessibleRequest(params.id, {
       userId: user.id,
       isMedewerker,
-      scopeCampusId,
+      scopeCampusIds,
     });
     if (!wr) {
       return NextResponse.json(
@@ -66,7 +72,7 @@ export async function POST(
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
-    const { user, isMedewerker, scopeCampusId } = auth.ctx;
+    const { user, isMedewerker, scopeCampusIds } = auth.ctx;
 
     const body = await request.json();
     const content = typeof body?.content === 'string' ? body.content.trim() : '';
@@ -80,7 +86,7 @@ export async function POST(
     const wr = await loadAccessibleRequest(params.id, {
       userId: user.id,
       isMedewerker,
-      scopeCampusId,
+      scopeCampusIds,
     });
     if (!wr) {
       return NextResponse.json(

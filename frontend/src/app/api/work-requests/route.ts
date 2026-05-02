@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
-    const { user, scopeCampusId, isMedewerker } = auth.ctx;
+    const { user, scopeCampusIds, isMedewerker } = auth.ctx;
 
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
@@ -27,14 +27,14 @@ export async function GET(request: NextRequest) {
     // MEDEWERKER ziet alleen eigen aanvragen.
     if (isMedewerker) {
       where.requestedById = user.id;
-    } else if (scopeCampusId) {
-      // Niet-MEDEWERKER met campus-scope ziet alleen die campus.
-      where.campusId = scopeCampusId;
+    } else if (scopeCampusIds.length > 0) {
+      // Niet-MEDEWERKER met campus-scope ziet alleen die campussen.
+      where.campusId = { in: scopeCampusIds };
     }
 
     if (campusIdFilter) {
-      // Expliciete filter mag niet boven scope uitgaan.
-      if (scopeCampusId && campusIdFilter !== scopeCampusId) {
+      // Expliciete filter mag niet buiten de scope vallen.
+      if (scopeCampusIds.length > 0 && !scopeCampusIds.includes(campusIdFilter)) {
         // Negeer filter buiten scope.
       } else {
         where.campusId = campusIdFilter;

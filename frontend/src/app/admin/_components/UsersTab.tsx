@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { Trash2 } from 'lucide-react';
 import DataTable from '@/components/ui/DataTable';
 import Avatar from '@/components/ui/Avatar';
+import ScopeCampusSelector from '@/components/ui/ScopeCampusSelector';
 import { apiGet, apiPatch, apiDelete } from '@/lib/api';
 import { Campus, User, PaginatedResponse } from '@/types';
 
@@ -37,7 +38,7 @@ export default function UsersTab() {
       patch,
     }: {
       id: string;
-      patch: { role?: string; scopeCampusId?: string | null };
+      patch: { role?: string; scopeCampusIds?: string[] };
     }) => apiPatch(`/api/users/${id}`, patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
@@ -109,24 +110,15 @@ export default function UsersTab() {
       key: 'scope',
       label: 'Toegang tot',
       render: (item: User) => (
-        <select
-          value={item.scopeCampusId ?? ''}
-          onChange={(e) =>
-            updateUser.mutate({
-              id: item.id,
-              patch: { scopeCampusId: e.target.value || null },
-            })
-          }
+        <ScopeCampusSelector
+          campuses={campuses}
+          value={(item.scopeCampuses ?? []).map((c) => c.id)}
           disabled={updateUser.isPending}
-          className="input h-9 max-w-[220px] py-0 text-sm"
-        >
-          <option value="">Volledige organisatie</option>
-          {campuses.map((c) => (
-            <option key={c.id} value={c.id}>
-              Campus {c.name}
-            </option>
-          ))}
-        </select>
+          compact
+          onChange={(scopeCampusIds) =>
+            updateUser.mutate({ id: item.id, patch: { scopeCampusIds } })
+          }
+        />
       ),
     },
     {

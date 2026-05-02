@@ -24,13 +24,20 @@ export async function GET(request: NextRequest) {
     const auth = await requireRole(request, INVITE_ROLES);
     if (!auth.ok) return auth.response;
 
-    const invitations = await prisma.userInvitation.findMany({
+    const raw = await prisma.userInvitation.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
         invitedBy: { select: { id: true, displayName: true, email: true } },
-        scopeCampus: { select: { id: true, name: true } },
+        scopeCampuses: {
+          select: { campus: { select: { id: true, name: true } } },
+        },
       },
     });
+
+    const invitations = raw.map((i) => ({
+      ...i,
+      scopeCampuses: i.scopeCampuses.map((s) => s.campus),
+    }));
 
     return NextResponse.json({ data: invitations });
   } catch (error) {
@@ -49,10 +56,10 @@ export async function POST(request: NextRequest) {
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const suggestedRoleRaw =
       typeof body?.suggestedRole === 'string' ? body.suggestedRole : 'MEDEWERKER';
-    const scopeCampusId =
-      typeof body?.scopeCampusId === 'string' && body.scopeCampusId !== ''
-        ? body.scopeCampusId
-        : null;
+    const rawScopeIds = Array.isArray(body?.scopeCampusIds) ? body.scopeCampusIds : [];
+    const scopeCampusIds = (rawScopeIds as unknown[]).filter(
+      (v): v is string => typeof v === 'string' && v !== '',
+    );
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ message: 'Ongeldig e-mailadres' }, { status: 400 });
@@ -69,10 +76,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (scopeCampusId) {
-      const campus = await prisma.campus.findUnique({ where: { id: scopeCampusId } });
-      if (!campus) {
-        return NextResponse.json({ message: 'Campus niet gevonden' }, { status: 400 });
+    if (scopeCampusIds.length > 0) {
+      const found = await prisma.campus.findMany({
+        where: { id: { in: scopeCampusIds } },
+        select: { id: true },
+      });
+      if (found.length !== scopeCampusIds.length) {
+        return NextResponse.json(
+          { message: 'Eén of meer campussen niet gevonden' },
+          { status: 400 },
+        );
       }
     }
 
@@ -90,12 +103,16 @@ export async function POST(request: NextRequest) {
         token,
         invitedById: user.id,
         suggestedRole: suggestedRoleRaw as (typeof VALID_SUGGESTED_ROLES)[number],
-        scopeCampusId,
         expiresAt,
+        scopeCampuses: scopeCampusIds.length
+          ? { create: scopeCampusIds.map((cid) => ({ campusId: cid })) }
+          : undefined,
       },
       include: {
         invitedBy: { select: { id: true, displayName: true, email: true } },
-        scopeCampus: { select: { id: true, name: true } },
+        scopeCampuses: {
+          select: { campus: { select: { id: true, name: true } } },
+        },
       },
     });
 
@@ -120,7 +137,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(invitation, { status: 201 });
+    return NextResponse.json(
+      {
+        ...invitation,
+        scopeCampuses: invitation.scopeCampuses.map((s) => s.campus),
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error('Invitations POST error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

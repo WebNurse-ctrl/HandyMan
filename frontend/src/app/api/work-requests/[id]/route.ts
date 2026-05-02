@@ -28,7 +28,7 @@ export async function GET(
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
-    const { user, scopeCampusId, isMedewerker } = auth.ctx;
+    const { user, scopeCampusIds, isMedewerker } = auth.ctx;
 
     const workRequest = await prisma.workRequest.findUnique({
       where: { id: params.id },
@@ -43,14 +43,18 @@ export async function GET(
     }
 
     // RBAC + scope: MEDEWERKER mag alleen eigen aanvragen zien;
-    // niet-MEDEWERKER met campus-scope alleen die campus.
+    // niet-MEDEWERKER met campus-scope alleen die campussen.
     if (isMedewerker && workRequest.requestedById !== user.id) {
       return NextResponse.json(
         { message: 'Werkaanvraag niet gevonden' },
         { status: 404 },
       );
     }
-    if (!isMedewerker && scopeCampusId && workRequest.campusId !== scopeCampusId) {
+    if (
+      !isMedewerker &&
+      scopeCampusIds.length > 0 &&
+      !scopeCampusIds.includes(workRequest.campusId)
+    ) {
       return NextResponse.json(
         { message: 'Werkaanvraag niet gevonden' },
         { status: 404 },
@@ -74,7 +78,7 @@ export async function PATCH(
   try {
     const auth = await requireAuth(request);
     if (!auth.ok) return auth.response;
-    const { user, isAdmin, isMedewerker, scopeCampusId } = auth.ctx;
+    const { user, isAdmin, isMedewerker, scopeCampusIds } = auth.ctx;
 
     const current = await prisma.workRequest.findUnique({
       where: { id: params.id },
@@ -89,14 +93,18 @@ export async function PATCH(
 
     // Toegang: MEDEWERKER kan alleen eigen aanvraag wijzigen (in praktijk
     // alleen comments — progress/assign zijn voor TD/DH); scope-gebruikers
-    // alleen binnen hun campus.
+    // alleen binnen hun campussen.
     if (isMedewerker && current.requestedById !== user.id) {
       return NextResponse.json(
         { message: 'Werkaanvraag niet gevonden' },
         { status: 404 },
       );
     }
-    if (!isMedewerker && scopeCampusId && current.campusId !== scopeCampusId) {
+    if (
+      !isMedewerker &&
+      scopeCampusIds.length > 0 &&
+      !scopeCampusIds.includes(current.campusId)
+    ) {
       return NextResponse.json(
         { message: 'Werkaanvraag niet gevonden' },
         { status: 404 },

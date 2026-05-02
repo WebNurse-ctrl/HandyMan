@@ -24,8 +24,10 @@ export async function GET(request: NextRequest) {
         jobTitle: true,
         avatarUrl: true,
         profileCompleted: true,
-        scopeCampusId: true,
         isActive: true,
+        scopeCampuses: {
+          select: { campus: { select: { id: true, name: true } } },
+        },
       },
     });
 
@@ -33,7 +35,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: 'User not found' }, { status: 401 });
     }
 
-    return NextResponse.json(user);
+    const { scopeCampuses, ...rest } = user;
+    return NextResponse.json({
+      ...rest,
+      scopeCampuses: scopeCampuses.map((s) => s.campus),
+    });
   } catch (error) {
     console.error('Auth me error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

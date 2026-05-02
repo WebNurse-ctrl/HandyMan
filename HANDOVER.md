@@ -121,11 +121,12 @@ HandyMan/
 
 ## Database Schema (Prisma)
 
-**19 tabellen** in `frontend/prisma/schema.prisma`:
+**21 tabellen** in `frontend/prisma/schema.prisma` (v1.6 fase C-2 voegde de
+join-tabellen `user_campus_scopes` en `user_invitation_scopes` toe):
 
 | Tabel | Beschrijving |
 |-------|-------------|
-| `users` | Gebruikers (Azure AD SSO én password-login, v1.6). Kolommen: `password_hash` (nullable; alleen voor uitgenodigde users), `azure_ad_id` (nullable; alleen voor SSO), `profile_completed`, `scope_campus_id` (nullable; FK → campuses). `isActive=false` = soft-delete. |
+| `users` | Gebruikers (Azure AD SSO én password-login, v1.6). Kolommen: `password_hash` (nullable; alleen voor uitgenodigde users), `azure_ad_id` (nullable; alleen voor SSO), `profile_completed`. Scope is M2M via `user_campus_scopes` (zie verder). `isActive=false` = soft-delete. |
 | `campuses` | Campuslocaties (naam, code, adres, stad). |
 | **`buildings`** | **v1.3** Gebouwen per campus. Cascade delete vanuit campus. |
 | **`departments`** | **v1.3** Afdelingen. Altijd campusId, optioneel buildingId (null = direct op campus). |
@@ -133,7 +134,9 @@ HandyMan/
 | `locations` | Legacy v1.0 locaties. Nog gekoppeld aan work_requests via `locationId`. |
 | `categories` | Categorieën met hiërarchie (parentId) en kleurlabel (HEX). |
 | `work_requests` | Werkaanvragen. v1.3: `building_id`, `department_id`, `room_id`. **v1.4**: `progress INT 0–100` (stappen van 20). **v1.6**: `assigned_to_id` (nullable; eigenaar na pickup). |
-| **`user_invitations`** | **v1.6 fase A** Uitnodigingen: `email`, `token` (uniek), `invited_by_id`, `suggested_role`, `scope_campus_id`, `expires_at` (7 dagen), `accepted_at`. |
+| **`user_invitations`** | **v1.6 fase A** Uitnodigingen: `email`, `token` (uniek), `invited_by_id`, `suggested_role`, `expires_at` (7 dagen), `accepted_at`. Scope is M2M via `user_invitation_scopes`. |
+| **`user_campus_scopes`** | **v1.6 fase C-2** Join-tabel `user_id` × `campus_id` (composite PK). Bepaalt voor niet-MEDEWERKERs welke campussen ze in werkaanvragen zien. Lege set = volledige organisatie. Cascade delete vanuit beide kanten. |
+| **`user_invitation_scopes`** | **v1.6 fase C-2** Join-tabel `invitation_id` × `campus_id`. Wordt bij accept-invite naar `user_campus_scopes` gekopieerd. |
 | `request_bundles` | Groepering van gerelateerde werkaanvragen. |
 | `tasks` | Taken met taskNumber, toewijzing, deadline, project-koppeling. |
 | `task_logs` | Werkregistratie per taak (beschrijving, uren). |
@@ -244,10 +247,11 @@ Gebruikers.
 | Beheer (/admin) | | | x (Gebruikers + Uitnodigingen) | x (alle tabs) | x (alle tabs) |
 | Campussen / categorieën / instellingen | | | | x | x |
 
-**Scope-RBAC** (v1.6): elke niet-MEDEWERKER kan optioneel beperkt worden
-tot één campus via `users.scope_campus_id`. `null` = volledige organisatie.
-Alleen werkaanvragen van die campus zijn dan zichtbaar in lijst, detail
-en comments. Geldt nog **niet** voor tasks/projects/purchases (v1.7).
+**Scope-RBAC** (v1.6, multi-campus): elke niet-MEDEWERKER kan optioneel
+beperkt worden tot **één of meerdere campussen** via de join-tabel
+`user_campus_scopes`. Lege selectie = volledige organisatie. Alleen
+werkaanvragen van die campussen zijn dan zichtbaar in lijst, detail en
+comments. Geldt nog **niet** voor tasks/projects/purchases (v1.7).
 
 **Server-side enforcement** (v1.6): de Next.js API routes valideren auth
 + rol via `requireAuth` / `requireRole` uit `lib/auth.ts`. De UI-only
@@ -683,6 +687,106 @@ ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'USER_REGISTERED';
 > transactie draaien. Voer beide statements los uit (Supabase SQL Editor
 > doet dit automatisch correct).
 
+### v1.6 fase C-2 — multi-campus scope
+
+De single-campus scope (`users.scope_campus_id`) is vervangen door een
+**many-to-many** relatie. Een gebruiker (en uitnodiging) kan nu één,
+meerdere of géén campussen hebben:
+
+| `scopeCampuses` | Toegang |
+|---|---|
+| `[]` (leeg) | **Volledige organisatie** (alle werkaanvragen) |
+| `[campus A]` | Alleen werkaanvragen van campus A |
+| `[campus A, campus B, …]` | Werkaanvragen van álle gekozen campussen |
+
+Twee nieuwe join-tabellen: `user_campus_scopes` en
+`user_invitation_scopes`. De oude `scope_campus_id`-kolommen op `users`
+en `user_invitations` verdwijnen (data wordt eerst gemigreerd naar de
+join-tabellen). API-handlers gebruiken `where.campusId IN
+(scopeCampusIds)` voor het filter.
+
+**Migratie-SQL (v1.6 fase C-2)** — moet vóór de deploy gedraaid
+worden, anders crasht de app op missing column / table:
+
+```sql
+-- 1. Nieuwe join-tabellen
+CREATE TABLE IF NOT EXISTS "user_campus_scopes" (
+  "user_id"   TEXT NOT NULL,
+  "campus_id" TEXT NOT NULL,
+  CONSTRAINT "user_campus_scopes_pkey" PRIMARY KEY ("user_id","campus_id")
+);
+CREATE INDEX IF NOT EXISTS "user_campus_scopes_campus_id_idx"
+  ON "user_campus_scopes"("campus_id");
+ALTER TABLE "user_campus_scopes"
+  ADD CONSTRAINT "user_campus_scopes_user_id_fkey"
+  FOREIGN KEY ("user_id") REFERENCES "users"("id")
+  ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "user_campus_scopes"
+  ADD CONSTRAINT "user_campus_scopes_campus_id_fkey"
+  FOREIGN KEY ("campus_id") REFERENCES "campuses"("id")
+  ON DELETE CASCADE ON UPDATE CASCADE;
+
+CREATE TABLE IF NOT EXISTS "user_invitation_scopes" (
+  "invitation_id" TEXT NOT NULL,
+  "campus_id"     TEXT NOT NULL,
+  CONSTRAINT "user_invitation_scopes_pkey" PRIMARY KEY ("invitation_id","campus_id")
+);
+CREATE INDEX IF NOT EXISTS "user_invitation_scopes_campus_id_idx"
+  ON "user_invitation_scopes"("campus_id");
+ALTER TABLE "user_invitation_scopes"
+  ADD CONSTRAINT "user_invitation_scopes_invitation_id_fkey"
+  FOREIGN KEY ("invitation_id") REFERENCES "user_invitations"("id")
+  ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "user_invitation_scopes"
+  ADD CONSTRAINT "user_invitation_scopes_campus_id_fkey"
+  FOREIGN KEY ("campus_id") REFERENCES "campuses"("id")
+  ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- 2. Backfill bestaande single-scope rijen (alleen als kolommen nog bestaan)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'users' AND column_name = 'scope_campus_id'
+  ) THEN
+    EXECUTE 'INSERT INTO "user_campus_scopes" ("user_id","campus_id")
+             SELECT id, scope_campus_id FROM "users"
+             WHERE scope_campus_id IS NOT NULL
+             ON CONFLICT DO NOTHING';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'user_invitations' AND column_name = 'scope_campus_id'
+  ) THEN
+    EXECUTE 'INSERT INTO "user_invitation_scopes" ("invitation_id","campus_id")
+             SELECT id, scope_campus_id FROM "user_invitations"
+             WHERE scope_campus_id IS NOT NULL
+             ON CONFLICT DO NOTHING';
+  END IF;
+END $$;
+
+-- 3. Drop oude single-scope kolommen + FKs + indexen
+ALTER TABLE "users"
+  DROP CONSTRAINT IF EXISTS "users_scope_campus_id_fkey";
+DROP INDEX IF EXISTS "users_scope_campus_id_idx";
+ALTER TABLE "users"
+  DROP COLUMN IF EXISTS "scope_campus_id";
+
+ALTER TABLE "user_invitations"
+  DROP CONSTRAINT IF EXISTS "user_invitations_scope_campus_id_fkey";
+ALTER TABLE "user_invitations"
+  DROP COLUMN IF EXISTS "scope_campus_id";
+```
+
+> Of pragmatisch: `cd frontend && npx prisma db push` — dat regelt
+> alles automatisch (Prisma genereert de juiste DDL voor de nieuwe
+> models). Backfill loopt dan **niet** automatisch; bestaande
+> single-scope-toewijzingen gaan verloren en moeten handmatig
+> hertoegekend worden via `/admin → Gebruikers`. Voor productie:
+> draai eerst de SQL hierboven (met backfill) in de Supabase SQL
+> Editor en pas dán `prisma db push` voor verificatie.
+
 ### v1.6 fase B — pickup-flow
 
 **Eigenaarschap losgekoppeld van aanvragerschap.** TD en Diensthoofd
@@ -746,9 +850,9 @@ verdwijnen.
 - `users.profile_completed BOOLEAN NOT NULL DEFAULT true` — bestaande
   users staan default op `true`; nieuwe uitgenodigde users worden op
   `false` gezet zodat de "vul je profiel aan"-flow getriggerd kan worden.
-- `users.scope_campus_id TEXT NULL` (FK → `campuses.id`) — als ingevuld
-  ziet de gebruiker alleen werkaanvragen van die campus; `NULL` =
-  volledige organisatie.
+- ~~`users.scope_campus_id`~~ (verwijderd in fase C-2). Vervangen door de
+  join-tabel `user_campus_scopes`: een gebruiker kan toegang hebben tot
+  één, meerdere of géén campussen (lege selectie = volledige organisatie).
 - `work_requests.assigned_to_id TEXT NULL` (FK → `users.id`) — eigenaar
   na "oppikken" door TD/Diensthoofd. `requested_by_id` blijft de
   oorspronkelijke aanvrager.

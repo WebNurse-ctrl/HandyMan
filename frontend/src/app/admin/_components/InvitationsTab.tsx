@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Mail, Send, Trash2 } from 'lucide-react';
+import ScopeCampusSelector from '@/components/ui/ScopeCampusSelector';
 import { apiDelete, apiGet, apiPost } from '@/lib/api';
 import { Campus, UserInvitation } from '@/types';
 import { formatDateTime } from '@/lib/utils';
@@ -20,7 +21,7 @@ export default function InvitationsTab() {
 
   const [email, setEmail] = useState('');
   const [suggestedRole, setSuggestedRole] = useState('MEDEWERKER');
-  const [scopeCampusId, setScopeCampusId] = useState('');
+  const [scopeCampusIds, setScopeCampusIds] = useState<string[]>([]);
 
   const { data, isLoading } = useQuery<{ data: UserInvitation[] }>({
     queryKey: ['admin-invitations'],
@@ -37,12 +38,12 @@ export default function InvitationsTab() {
       apiPost<UserInvitation>('/api/invitations', {
         email,
         suggestedRole,
-        scopeCampusId: scopeCampusId || null,
+        scopeCampusIds,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-invitations'] });
       setEmail('');
-      setScopeCampusId('');
+      setScopeCampusIds([]);
       setSuggestedRole('MEDEWERKER');
       toast.success('Uitnodiging verzonden');
     },
@@ -116,22 +117,14 @@ export default function InvitationsTab() {
             </select>
           </div>
           <div>
-            <label htmlFor="invite-scope" className="label">
-              Toegang tot
-            </label>
-            <select
-              id="invite-scope"
-              value={scopeCampusId}
-              onChange={(e) => setScopeCampusId(e.target.value)}
-              className="input mt-1"
-            >
-              <option value="">Volledige organisatie</option>
-              {campuses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  Campus {c.name}
-                </option>
-              ))}
-            </select>
+            <span className="label">Toegang tot</span>
+            <div className="mt-1">
+              <ScopeCampusSelector
+                campuses={campuses}
+                value={scopeCampusIds}
+                onChange={setScopeCampusIds}
+              />
+            </div>
           </div>
           <div className="flex items-end sm:col-span-2 lg:col-span-4">
             <button
@@ -177,7 +170,11 @@ export default function InvitationsTab() {
                       {SUGGESTED_ROLE_LABELS[inv.suggestedRole] ?? inv.suggestedRole}
                     </td>
                     <td className="px-2 py-2.5 text-muted-foreground">
-                      {inv.scopeCampus ? `Campus ${inv.scopeCampus.name}` : 'Volledige organisatie'}
+                      {!inv.scopeCampuses || inv.scopeCampuses.length === 0
+                        ? 'Volledige organisatie'
+                        : inv.scopeCampuses.length === 1
+                          ? `Campus ${inv.scopeCampuses[0].name}`
+                          : inv.scopeCampuses.map((c) => c.name).join(', ')}
                     </td>
                     <td className="px-2 py-2.5 text-muted-foreground">
                       {formatDateTime(inv.createdAt)}

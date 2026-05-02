@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    const [data, total] = await Promise.all([
+    const [rawData, total] = await Promise.all([
       prisma.user.findMany({
         where,
         skip,
@@ -37,12 +37,18 @@ export async function GET(request: NextRequest) {
           role: true,
           avatarUrl: true,
           lastLoginAt: true,
-          scopeCampusId: true,
-          scopeCampus: { select: { id: true, name: true } },
+          scopeCampuses: {
+            select: { campus: { select: { id: true, name: true } } },
+          },
         },
       }),
       prisma.user.count({ where }),
     ]);
+
+    const data = rawData.map((u) => ({
+      ...u,
+      scopeCampuses: u.scopeCampuses.map((s) => s.campus),
+    }));
 
     return NextResponse.json({
       data,

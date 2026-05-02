@@ -46,12 +46,17 @@ export async function POST(request: NextRequest) {
         jobTitle: true,
         avatarUrl: true,
         profileCompleted: true,
-        scopeCampusId: true,
         isActive: true,
+        scopeCampuses: {
+          select: { campus: { select: { id: true, name: true } } },
+        },
       },
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json({
+      ...updated,
+      scopeCampuses: updated.scopeCampuses.map((s) => s.campus),
+    });
   } catch (error) {
     console.error('Complete profile error:', error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

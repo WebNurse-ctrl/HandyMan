@@ -24,6 +24,7 @@ export async function PATCH(
 
     const body = await request.json();
     const data: Record<string, unknown> = {};
+    let scopeCampusIds: string[] | null = null;
 
     if (body.role !== undefined) {
       if (!VALID_ROLES.includes(body.role as Role)) {
@@ -32,46 +33,81 @@ export async function PATCH(
       data.role = body.role as Role;
     }
 
-    if (body.scopeCampusId !== undefined) {
-      const value = body.scopeCampusId;
-      if (value === null || value === '') {
-        data.scopeCampusId = null;
-      } else if (typeof value === 'string') {
-        const campus = await prisma.campus.findUnique({ where: { id: value } });
-        if (!campus) {
+    if (body.scopeCampusIds !== undefined) {
+      if (!Array.isArray(body.scopeCampusIds)) {
+        return NextResponse.json(
+          { message: 'scopeCampusIds moet een array zijn' },
+          { status: 400 },
+        );
+      }
+      const ids = (body.scopeCampusIds as unknown[]).filter(
+        (v): v is string => typeof v === 'string' && v !== '',
+      );
+      if (ids.length > 0) {
+        const found = await prisma.campus.findMany({
+          where: { id: { in: ids } },
+          select: { id: true },
+        });
+        if (found.length !== ids.length) {
           return NextResponse.json(
-            { message: 'Campus niet gevonden' },
+            { message: 'Eén of meer campussen niet gevonden' },
             { status: 400 },
           );
         }
-        data.scopeCampusId = value;
       }
+      scopeCampusIds = ids;
     }
 
-    if (Object.keys(data).length === 0) {
+    if (Object.keys(data).length === 0 && scopeCampusIds === null) {
       return NextResponse.json(
         { message: 'Geen geldige velden om bij te werken' },
         { status: 400 },
       );
     }
 
-    const user = await prisma.user.update({
-      where: { id: params.id },
-      data,
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        department: true,
-        jobTitle: true,
-        role: true,
-        avatarUrl: true,
-        lastLoginAt: true,
-        scopeCampusId: true,
-        scopeCampus: { select: { id: true, name: true } },
-      },
+    const user = await prisma.$transaction(async (tx) => {
+      if (Object.keys(data).length > 0) {
+        await tx.user.update({ where: { id: params.id }, data });
+      }
+      if (scopeCampusIds !== null) {
+        await tx.userCampusScope.deleteMany({ where: { userId: params.id } });
+        if (scopeCampusIds.length > 0) {
+          await tx.userCampusScope.createMany({
+            data: scopeCampusIds.map((cid) => ({ userId: params.id, campusId: cid })),
+            skipDuplicates: true,
+          });
+        }
+      }
+      const updated = await tx.user.findUnique({
+        where: { id: params.id },
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          department: true,
+          jobTitle: true,
+          role: true,
+          avatarUrl: true,
+          lastLoginAt: true,
+          scopeCampuses: {
+            select: { campus: { select: { id: true, name: true } } },
+          },
+        },
+      });
+      return updated;
     });
-    return NextResponse.json(user);
+
+    if (!user) {
+      return NextResponse.json(
+        { message: 'Gebruiker niet gevonden' },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({
+      ...user,
+      scopeCampuses: user.scopeCampuses.map((s) => s.campus),
+    });
   } catch (error: unknown) {
     const err = error as { code?: string };
     if (err.code === 'P2025') {

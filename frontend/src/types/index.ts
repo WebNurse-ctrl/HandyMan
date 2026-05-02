@@ -19,16 +19,16 @@ export interface User {
   avatarUrl?: string;
   lastLoginAt?: string;
   profileCompleted?: boolean;
-  scopeCampusId?: string | null;
-  scopeCampus?: { id: string; name: string } | null;
+  /** Lege array = volledige organisatie */
+  scopeCampuses?: { id: string; name: string }[];
 }
 
 export interface UserInvitation {
   id: string;
   email: string;
   suggestedRole: UserRole;
-  scopeCampusId?: string | null;
-  scopeCampus?: { id: string; name: string } | null;
+  /** Lege array = volledige organisatie */
+  scopeCampuses?: { id: string; name: string }[];
   invitedBy: { id: string; displayName: string; email: string };
   expiresAt: string;
   acceptedAt?: string | null;

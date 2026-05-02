@@ -35,7 +35,6 @@ model User {
   role              UserRole  @default(MEDEWERKER)
   isActive          Boolean   @default(true) @map("is_active")
   profileCompleted  Boolean   @default(true) @map("profile_completed")
-  scopeCampusId     String?   @map("scope_campus_id")
   lastLoginAt       DateTime? @map("last_login_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
@@ -52,10 +51,9 @@ model User {
   notifications         Notification[]
   comments              Comment[]
   auditLogs             AuditLog[]
-  scopeCampus           Campus?            @relation("UserScopeCampus", fields: [scopeCampusId], references: [id])
+  scopeCampuses         UserCampusScope[]
   invitationsSent       UserInvitation[]   @relation("InvitationInviter")
 
-  @@index([scopeCampusId])
   @@map("users")
 }
 
@@ -65,18 +63,41 @@ model UserInvitation {
   token           String    @unique
   invitedById     String    @map("invited_by_id")
   suggestedRole   UserRole  @default(MEDEWERKER) @map("suggested_role")
-  scopeCampusId   String?   @map("scope_campus_id")
   expiresAt       DateTime  @map("expires_at")
   acceptedAt      DateTime? @map("accepted_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  invitedBy   User    @relation("InvitationInviter", fields: [invitedById], references: [id])
-  scopeCampus Campus? @relation("InvitationScopeCampus", fields: [scopeCampusId], references: [id])
+  invitedBy     User                    @relation("InvitationInviter", fields: [invitedById], references: [id])
+  scopeCampuses UserInvitationScope[]
 
   @@index([email])
   @@index([invitedById])
   @@map("user_invitations")
+}
+
+model UserCampusScope {
+  userId   String @map("user_id")
+  campusId String @map("campus_id")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@id([userId, campusId])
+  @@index([campusId])
+  @@map("user_campus_scopes")
+}
+
+model UserInvitationScope {
+  invitationId String @map("invitation_id")
+  campusId     String @map("campus_id")
+
+  invitation UserInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  campus     Campus         @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@id([invitationId, campusId])
+  @@index([campusId])
+  @@map("user_invitation_scopes")
 }
 
 // ============================================================================
@@ -93,13 +114,13 @@ model Campus {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  locations    Location[]
-  buildings    Building[]
-  departments  Department[]
-  workRequests WorkRequest[]
-  projects     Project[]
-  scopedUsers  User[]           @relation("UserScopeCampus")
-  invitations  UserInvitation[] @relation("InvitationScopeCampus")
+  locations          Location[]
+  buildings          Building[]
+  departments        Department[]
+  workRequests       WorkRequest[]
+  projects           Project[]
+  userScopes         UserCampusScope[]
+  invitationScopes   UserInvitationScope[]
 
   @@map("campuses")
 }
