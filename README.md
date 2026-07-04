@@ -2,6 +2,9 @@
 
 Een moderne, schaalbare webapplicatie voor het beheren van werkaanvragen, taken, projecten, aankopen en budgetten voor organisaties met meerdere campussen.
 
+> Een **Salvion.Care**-project. Salvion.Care is de onderneming achter de
+> zorg-softwaresuite — vlaggenschip **ResidentCare**, plus **CareDesk** en **HandyMan**.
+
 ## Features
 
 - **Werkaanvragen** - Medewerkers dienen eenvoudig aanvragen in met foto-upload
