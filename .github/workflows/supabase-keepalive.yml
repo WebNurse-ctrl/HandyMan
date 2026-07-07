@@ -1,0 +1,50 @@
+# Houdt het Supabase Free-tier-project wakker.
+#
+# Supabase pauzeert een Free-plan-project na 7 dagen zonder database-activiteit.
+# Deze workflow opent elke 2 dagen een echte Postgres-verbinding en voert
+# `select 1;` uit -> dat telt als activiteit en reset de pauze-teller.
+# HandyMan verbindt zelf ook via een Postgres-connection-string (Prisma), dus
+# deze ping gebruikt exact hetzelfde kanaal als de app.
+#
+# Vereiste GitHub-secret (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_DB_URL = de "Session pooler" connection string (URI) uit
+#   Supabase -> Project Settings -> Database -> Connection string -> Session pooler,
+#   met het echte databasewachtwoord ingevuld. Vorm:
+#   postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+#   (poort 5432, session mode -- niet de pgbouncer-poort 6543 die de app runtime gebruikt).
+name: Supabase keep-alive
+
+on:
+  schedule:
+    # Elke 2 dagen om 07:07 UTC (ruim binnen het 7-daagse pauze-venster).
+    - cron: "7 7 */2 * *"
+  # Handmatig starten om de secret meteen te testen.
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Secret SUPABASE_DB_URL ontbreekt. Voeg hem toe via Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            if psql "$SUPABASE_DB_URL" -tAc "select 1;"; then
+              echo "Keep-alive OK (poging $attempt)"
+              exit 0
+            fi
+            wait=$((attempt * 5))
+            echo "Poging $attempt mislukt, opnieuw over ${wait}s..."
+            sleep "$wait"
+          done
+          echo "::error::Kon na 3 pogingen geen verbinding maken met de database."
+          exit 1
